@@ -5,6 +5,10 @@
 /*   includes other header files based on which Uses_XXXX symbols are      */
 /*   defined.                                                              */
 /*                                                                         */
+/*   Sixel graphics support additions and modifications:                    */
+/*   Copyright (c) 2026 by Christian Klukas.                                */
+/*   Licensed under the MIT License.                                        */
+/*                                                                         */
 /* ------------------------------------------------------------------------*/
 /*
  *      Turbo Vision - Version 2.0
@@ -141,6 +145,23 @@
 #if defined( Uses_TSurfaceView )
 #define Uses_TView
 #define Uses_TDrawSurface
+#endif
+
+#if defined( Uses_TGraphicView )
+#define Uses_TView
+#define Uses_TGraphicCanvas
+#define __INC_GRAPHICS_H
+#endif
+
+#if defined( Uses_TGraphicCanvas )
+#define Uses_TPoint
+#define Uses_TRect
+#define __INC_GRAPHICS_H
+#endif
+
+#if defined( Uses_TGraphicRuntime )
+#define Uses_TGraphicCanvas
+#define __INC_GRAPHICS_H
 #endif
 
 #if defined( Uses_TDrawSurface )
@@ -762,6 +783,10 @@
 
 #if defined( __INC_SURFACE_H )
 #include <tvision/surface.h>
+#endif
+
+#if defined( __INC_GRAPHICS_H )
+#include <tvision/graphics.h>
 #endif
 
 #if defined( __INC_APP_H )

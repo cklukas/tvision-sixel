@@ -1,3 +1,11 @@
+# Turbo Vision with Sixel support
+
+This project is based on the Turbo Vision codebase described below and extends it with prototype support for sixel graphics. The screenshot shows the new `sixeldemo` app with several raster-backed views running on macOS in the iTerm2 terminal app. This is a working prototype; it has not been tested on Linux, and Windows is not yet supported for sixel graphics.
+
+![Sixel demo in iTerm2](sixel/Screenshot%202026-07-04%20at%2022.39.32.png)
+
+See the [sixel implementation documentation](sixel/README.md) for details on the graphics view API, overlay compositor, shadow drawing, sixel encoder, configuration, and demo internals.
+
 # Turbo Vision
 
 A modern port of Turbo Vision 2.0, the classical framework for text-based user interfaces. Now cross-platform and with Unicode support.

@@ -1,8 +1,16 @@
 #ifndef TVISION_PLATFORM_H
 #define TVISION_PLATFORM_H
 
+/*
+ * Sixel graphics support additions and modifications:
+ * Copyright (c) 2026 by Christian Klukas
+ * Licensed under the MIT License.
+ */
+
 #define Uses_TPoint
 #define Uses_TColorAttr
+#define Uses_TGraphicCanvas
+#define Uses_TGraphicView
 #include <tvision/tv.h>
 #include <internal/dispbuff.h>
 #include <internal/events.h>
@@ -30,6 +38,10 @@ public:
     virtual void setCaretPosition(TPoint /*pos*/) noexcept {};
     virtual void setCaretSize(int /*size*/) noexcept {};
     virtual void clearScreen() noexcept {}
+    virtual Boolean supportsGraphics() noexcept { return False; }
+    virtual TGraphicProfile getGraphicProfile() noexcept { return TGraphicProfile(); }
+    virtual void writeGraphicImage(TPoint /*pos*/, const uint32_t * /*pixels*/,
+                                   TPoint /*size*/, int /*maxColors*/) noexcept {}
     virtual void flush() noexcept {};
 };
 
@@ -124,10 +136,15 @@ public:
         { console.lock([&] (auto *c) { displayBuf.clearScreen(c->display); }); }
     int getScreenRows() noexcept { return displayBuf.size.y; }
     int getScreenCols() noexcept { return displayBuf.size.x; }
+    int getDisplayColorCount() noexcept
+        { return console.lock([] (auto *c) { return c->display.getColorCount(); }); }
+    TPoint getDisplayFontSize() noexcept
+        { return console.lock([] (auto *c) { return c->display.getFontSize(); }); }
     void setCaretPosition(int x, int y) noexcept { displayBuf.setCaretPosition(x, y); }
     ushort getScreenMode() noexcept;
     void setCaretSize(int size) noexcept { displayBuf.setCaretSize(size); }
     void screenWrite(int x, int y, TScreenCell *b, int l) noexcept { displayBuf.screenWrite(x, y, b, l); }
+    void touchGraphics(TGraphicView *view = nullptr) noexcept { displayBuf.touchGraphics(view); }
     void flushScreen() noexcept
         { console.lock([&] (auto *c) { displayBuf.flushScreen(c->display); }); }
     TScreenCell *reloadScreenInfo() noexcept

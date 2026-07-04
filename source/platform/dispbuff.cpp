@@ -1,3 +1,9 @@
+/*
+ * Sixel graphics support additions and modifications:
+ * Copyright (c) 2026 by Christian Klukas
+ * Licensed under the MIT License.
+ */
+
 #define Uses_TScreenCell
 #include <tvision/tv.h>
 
@@ -5,6 +11,7 @@
 #include <internal/platform.h>
 #include <internal/codepage.h>
 #include <internal/getenv.h>
+#include <internal/graphics.h>
 #include <chrono>
 
 #ifdef _MSC_VER
@@ -47,6 +54,36 @@ void DisplayBuffer::resizeBuffer() noexcept
 
     rowDamage.resize(0);
     rowDamage.resize(size.y, {INT_MAX, INT_MIN});
+}
+
+std::vector<TRect> DisplayBuffer::dirtyCellRects() const
+{
+    std::vector<TRect> rects;
+    for (int y = 0; y < size.y; ++y)
+    {
+        Range damage = rowDamage[y];
+        int begin = INT_MAX;
+        if (damage.begin <= damage.end)
+        {
+            for (int x = damage.begin; x <= damage.end; ++x)
+            {
+                size_t i = size_t(y)*size.x + x;
+                if (buffer[i] != flushBuffer[i])
+                {
+                    if (begin == INT_MAX)
+                        begin = x;
+                }
+                else if (begin != INT_MAX)
+                {
+                    rects.push_back(TRect(begin, y, x, y + 1));
+                    begin = INT_MAX;
+                }
+            }
+            if (begin != INT_MAX)
+                rects.push_back(TRect(begin, y, damage.end + 1, y + 1));
+        }
+    }
+    return rects;
 }
 
 void DisplayBuffer::clearScreen(DisplayAdapter &display) noexcept
@@ -99,6 +136,11 @@ void DisplayBuffer::screenWrite(int x, int y, TScreenCell *buf, int len) noexcep
         setDirty(x, y, len);
         screenTouched = true;
     }
+}
+
+void DisplayBuffer::touchGraphics(TGraphicView *view) noexcept
+{
+    graphics.touch(view);
 }
 
 void DisplayBuffer::setDirty(int x, int y, int len) noexcept
@@ -200,7 +242,7 @@ void DisplayBuffer::undrawCursor() noexcept
 
 bool DisplayBuffer::needsFlush() const noexcept
 {
-    return screenTouched || caretOrCursorChanged || caretSize != newCaretSize;
+    return screenTouched || graphics.touched || caretOrCursorChanged || caretSize != newCaretSize;
 }
 
 namespace
@@ -212,14 +254,40 @@ void DisplayBuffer::flushScreen(DisplayAdapter &display) noexcept
 {
     if (needsFlush() && timeToFlush())
     {
-        drawCursor();
-        flushScreenAlgorithm(*this, display);
-        if (caretPosition.x != -1)
-            display.setCaretPosition(caretPosition);
-        undrawCursor();
-        if (caretSize != newCaretSize)
-            display.setCaretSize(newCaretSize);
-        display.flush();
+        bool textTouched = screenTouched || caretOrCursorChanged || caretSize != newCaretSize;
+        GraphicFrame currentGraphics = collectGraphicFrame();
+        std::vector<TRect> dirtyCells;
+        if (textTouched)
+        {
+            std::vector<TRect> stale = eraseStaleGraphicOverlay(
+                display, graphics, buffer.data(), size, currentGraphics
+            );
+            for (TRect rect : stale)
+            {
+                rect.intersect(TRect(0, 0, size.x, size.y));
+                for (int y = rect.a.y; y < rect.b.y; ++y)
+                    setDirty(rect.a.x, y, rect.b.x - rect.a.x);
+            }
+            drawCursor();
+            dirtyCells = dirtyCellRects();
+            flushScreenAlgorithm(*this, display);
+            if (caretPosition.x != -1)
+                display.setCaretPosition(caretPosition);
+            undrawCursor();
+            if (caretSize != newCaretSize)
+                display.setCaretSize(newCaretSize);
+            display.flush();
+        }
+        const std::vector<TRect> *overlayDirtyCells = nullptr;
+        if (!graphics.allTouched)
+        {
+            if (textTouched)
+                overlayDirtyCells = &dirtyCells;
+        }
+        GraphicFrame graphicsFrame = textTouched || graphics.touched ?
+            drawGraphicOverlay(display, graphics, overlayDirtyCells) :
+            currentGraphics;
+        graphics.finishFrame(graphicsFrame);
         screenTouched = false;
         caretOrCursorChanged = false;
         caretSize = newCaretSize;

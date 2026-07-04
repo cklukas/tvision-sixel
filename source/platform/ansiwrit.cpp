@@ -1,8 +1,15 @@
+/*
+ * Sixel graphics support additions and modifications:
+ * Copyright (c) 2026 by Christian Klukas
+ * Licensed under the MIT License.
+ */
+
 #include <internal/ansiwrit.h>
 #include <internal/platform.h>
 #include <internal/strings.h>
 #include <internal/conctl.h>
 #include <internal/getenv.h>
+#include <internal/sixel.h>
 #include <stdlib.h>
 
 #define CSI "\x1B["
@@ -155,6 +162,21 @@ void AnsiScreenWriter::setCaretPosition(TPoint pos) noexcept
     buf.reserve(32);
     bufWriteCSI2(pos.y + 1, pos.x + 1, 'H');
     caretPos = pos;
+}
+
+void AnsiScreenWriter::writeSixelImage( TPoint pos, const uint32_t *pixels,
+                                        TPoint size, int maxColors ) noexcept
+{
+    std::string sixel = encodeSixel(pixels, size, maxColors);
+    if (sixel.empty())
+        return;
+
+    buf.reserve(32 + sixel.size());
+    buf.push(CSI "0m");
+    bufWriteCSI2(pos.y + 1, pos.x + 1, 'H');
+    buf.push(TStringView(sixel.data(), sixel.size()));
+    lastAttr = {};
+    caretPos = {-1, -1};
 }
 
 void AnsiScreenWriter::flush() noexcept

@@ -1,7 +1,14 @@
+/*
+ * Sixel graphics support additions and modifications:
+ * Copyright (c) 2026 by Christian Klukas
+ * Licensed under the MIT License.
+ */
+
 #ifdef HAVE_NCURSES
 
 #include <internal/ncurdisp.h>
 #include <internal/conctl.h>
+#include <internal/graphics.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -70,6 +77,22 @@ TPoint NcursesDisplay::getFontSize() noexcept
 void NcursesDisplay::clearScreen() noexcept
 {
     ansiScreenWriter.clearScreen();
+}
+
+Boolean NcursesDisplay::supportsGraphics() noexcept
+{
+    return SixelConfig::activeProfile(getFontSize()).enabled;
+}
+
+TGraphicProfile NcursesDisplay::getGraphicProfile() noexcept
+{
+    return SixelConfig::activeProfile(getFontSize());
+}
+
+void NcursesDisplay::writeGraphicImage( TPoint pos, const uint32_t *pixels,
+                                      TPoint size, int maxColors ) noexcept
+{
+    ansiScreenWriter.writeSixelImage(pos, pixels, size, maxColors);
 }
 
 void NcursesDisplay::writeCell( TPoint pos, TStringView text, TColorAttr attr,

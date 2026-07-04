@@ -1,6 +1,12 @@
 #ifndef TVISION_NCURDISP_H
 #define TVISION_NCURDISP_H
 
+/*
+ * Sixel graphics support additions and modifications:
+ * Copyright (c) 2026 by Christian Klukas
+ * Licensed under the MIT License.
+ */
+
 #include <internal/platform.h>
 
 #ifdef HAVE_NCURSES
@@ -41,6 +47,9 @@ private:
     void setCaretPosition(TPoint) noexcept override;
     void setCaretSize(int) noexcept override;
     void clearScreen() noexcept override;
+    Boolean supportsGraphics() noexcept override;
+    TGraphicProfile getGraphicProfile() noexcept override;
+    void writeGraphicImage(TPoint, const uint32_t *, TPoint, int) noexcept override;
     void flush() noexcept override;
 };
 

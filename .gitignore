@@ -11,10 +11,15 @@
 !source/**/
 !test/
 !test/**/
+!sixel/
 !.github/
 !.github/**/
 
 !*.*
+sixel/*
+!sixel/README.md
+!sixel/Screenshot 2026-07-04 at 22.39.32.png
+!sixel/DSC_4909.jpeg
 *~/
 .*
 !.git*

@@ -1,6 +1,12 @@
 #ifndef TVISION_ANSIWRIT_H
 #define TVISION_ANSIWRIT_H
 
+/*
+ * Sixel graphics support additions and modifications:
+ * Copyright (c) 2026 by Christian Klukas
+ * Licensed under the MIT License.
+ */
+
 #define Uses_TScreenCell
 #define Uses_TPoint
 #include <tvision/tv.h>
@@ -142,6 +148,7 @@ public:
     void clearScreen() noexcept;
 
     void writeCell(TPoint, TStringView, TColorAttr, bool) noexcept;
+    void writeSixelImage(TPoint, const uint32_t *, TPoint, int) noexcept;
     void setCaretPosition(TPoint) noexcept;
     void flush() noexcept;
 };

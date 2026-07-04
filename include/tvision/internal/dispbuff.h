@@ -1,9 +1,18 @@
 #ifndef TVISION_DISPBUFF_H
 #define TVISION_DISPBUFF_H
 
+/*
+ * Sixel graphics support additions and modifications:
+ * Copyright (c) 2026 by Christian Klukas
+ * Licensed under the MIT License.
+ */
+
 #define Uses_TPoint
+#define Uses_TGraphicView
+#define Uses_TRect
 #define Uses_TScreenCell
 #include <tvision/tv.h>
+#include <internal/graphics.h>
 
 #include <vector>
 #include <chrono>
@@ -31,6 +40,7 @@ class DisplayBuffer
 
     std::vector<TScreenCell> buffer, flushBuffer;
     std::vector<Range> rowDamage;
+    GraphicOverlayState graphics;
 
     const bool wideOverlapping;
     bool screenTouched {true};
@@ -57,6 +67,7 @@ class DisplayBuffer
     bool inBounds(int x, int y) const noexcept;
 
     void resizeBuffer() noexcept;
+    std::vector<TRect> dirtyCellRects() const;
     void setDirty(int x, int y, int len) noexcept;
     void validateCell(TScreenCell &cell) const noexcept;
 
@@ -78,6 +89,7 @@ public:
     void setCaretSize(int size) noexcept;
     void setCaretPosition(int x, int y) noexcept;
     void screenWrite(int x, int y, TScreenCell *buf, int len) noexcept;
+    void touchGraphics(TGraphicView *view = nullptr) noexcept;
     void clearScreen(DisplayAdapter &) noexcept;
     void redrawScreen(DisplayAdapter &) noexcept;
     void flushScreen(DisplayAdapter &) noexcept;
