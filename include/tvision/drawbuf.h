@@ -34,55 +34,42 @@ class TDrawBuffer
 public:
 
     void moveChar( ushort indent, char c, TColorAttr attr, ushort count ) noexcept;
-    ushort moveStr( ushort indent, TStringView str, TColorAttr attr ) noexcept;
-    ushort moveStr( ushort indent, TStringView str, TColorAttr attr, ushort width, ushort begin = 0 ) noexcept;
-    ushort moveCStr( ushort indent, TStringView str, TAttrPair attrs ) noexcept;
-    ushort moveCStr( ushort indent, TStringView str, TAttrPair attrs, ushort width, ushort begin = 0 ) noexcept;
+    ushort moveStr( ushort indent, TStringView str, TColorAttr attr,
+                    ushort maxStrWidth = USHRT_MAX, ushort strIndent = 0 ) noexcept;
+    ushort moveCStr( ushort indent, TStringView str, TAttrPair attrs,
+                     ushort maxStrWidth = USHRT_MAX, ushort strIndent = 0 ) noexcept;
     void moveBuf( ushort indent, const void _FAR *source, TColorAttr attr, ushort count ) noexcept;
 
     void putAttribute( ushort indent, TColorAttr attr ) noexcept;
     void putChar( ushort indent, uchar c ) noexcept;
-    size_t length() const noexcept;
 
-#ifdef __FLAT__
+#if defined( __FLAT__ )
     TDrawBuffer() noexcept;
     ~TDrawBuffer();
 #endif
 
 protected:
 
-#ifdef __FLAT__
-    static TSpan<TScreenCell> allocData() noexcept;
-
-    const TSpan<TScreenCell> data;
+#if defined( __FLAT__ )
+    TScreenCell *data;
+    size_t capacity;
 #else
     TScreenCell data[maxViewWidth];
+    enum { capacity = maxViewWidth };
 #endif
 
 };
 
-#define loByte(w)    (((uchar *)&w)[0])
-#define hiByte(w)    (((uchar *)&w)[1])
-
 inline void TDrawBuffer::putAttribute( ushort indent, TColorAttr attr ) noexcept
 {
-    if (indent < length())
+    if (indent < capacity)
         ::setAttr(data[indent], attr);
 }
 
 inline void TDrawBuffer::putChar( ushort indent, uchar c ) noexcept
 {
-    if (indent < length())
+    if (indent < capacity)
         ::setChar(data[indent], c);
-}
-
-inline size_t TDrawBuffer::length() const noexcept
-{
-#ifdef __FLAT__
-    return data.size();
-#else
-    return maxViewWidth;
-#endif
 }
 
 #endif  // Uses_TDrawBuffer

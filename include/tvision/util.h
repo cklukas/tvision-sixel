@@ -16,7 +16,7 @@
 #if !defined( __UTIL_H )
 #define __UTIL_H
 
-#include <stddef.h>
+#include <stdarg.h>
 
 inline constexpr int min( int a, int b )
 {
@@ -46,12 +46,17 @@ inline constexpr const T& max( const T& a, const T& b )
 void fexpand( char *rpath ) noexcept;
 void fexpand( char *rpath, const char *relativeTo ) noexcept;
 
-char hotKey( const char *s ) noexcept;
-ushort ctrlToArrow( ushort ) noexcept;
+char hotKey( TStringView s ) noexcept;
+ushort ctrlToArrow( ushort keyCode ) noexcept;
 char getAltChar( ushort keyCode ) noexcept;
 ushort getAltCode( char ch ) noexcept;
-char getCtrlChar(ushort) noexcept;
-ushort getCtrlCode(uchar) noexcept;
+char getCtrlChar( ushort keyCode ) noexcept;
+ushort getCtrlCode( uchar ch ) noexcept;
+
+struct _FAR KeyDownEvent;
+TStringView hotKeyStr( TStringView s ) noexcept;
+TStringView getAltCharStr( const KeyDownEvent & ) noexcept;
+TStringView getCtrlCharStr( const KeyDownEvent & ) noexcept;
 
 ushort historyCount( uchar id ) noexcept;
 const char *historyStr( uchar id, int index ) noexcept;
@@ -72,17 +77,19 @@ ushort popupMenu(TPoint where, TMenuItem &aMenu, TGroup * = 0);
 Boolean lowMemory() noexcept;
 
 char *newStr( TStringView ) noexcept;
+char *formatStr( const char _FAR *format, ... ) noexcept;
+char *vFormatStr( const char _FAR *format, va_list args ) noexcept;
 
 Boolean driveValid( char drive ) noexcept;
 Boolean isDir( const char *str ) noexcept;
 Boolean pathValid( const char *path ) noexcept;
 Boolean validFileName( const char *fileName ) noexcept;
-void getCurDir( char *dir, char drive=-1 ) noexcept;
+void getCurDir( char *dir, char drive = -1 ) noexcept;
 Boolean getHomeDir( char *drive, char *dir ) noexcept;
 Boolean isWild( const char *f ) noexcept;
 
-size_t strnzcpy( char *dest, TStringView src, size_t n ) noexcept;
-size_t strnzcat( char *dest, TStringView src, size_t n ) noexcept;
+size_t strnzcpy( char *dst, TStringView src, size_t dstSize ) noexcept;
+size_t strnzcat( char *dst, TStringView src, size_t dstSize ) noexcept;
 
 void printKeyCode(ostream _FAR &, ushort keyCode);
 void printControlKeyState(ostream _FAR &, ushort controlKeyState);

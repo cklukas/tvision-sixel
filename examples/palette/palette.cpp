@@ -33,7 +33,7 @@ void TTestView::draw()
                                         // given index.
         sprintf(text, " This line uses index %02X, color is %02X ", i, textAttr);
         buf.moveStr(0, text, textAttr);      // Write to buffer.
-        writeLine(0, i-1, size.x, i, buf);   // Write buffer to
+        writeLine(0, i-1, size.x, 1, buf);   // Write buffer to
                                              // view.
     }
 //
@@ -58,7 +58,7 @@ TPalette& TTestView::getPalette() const
 // TTestWindow
 //
 
-#define cpTestWindow "\x40\x41\x42\x43\x44\x45"
+#define cpTestWindow "\x88\x89\x8A\x8B\x8C\x8D"
 // SIX new colors!
 #define cpBlueWindow "\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F"
 // original palettes

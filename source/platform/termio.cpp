@@ -1,15 +1,18 @@
 #define Uses_TKeys
 #include <tvision/tv.h>
 
-#include <internal/terminal.h>
+#include <internal/termio.h>
 #include <internal/far2l.h>
-#include <internal/stdioctl.h>
+#include <internal/conctl.h>
 #include <internal/constmap.h>
 #include <internal/constarr.h>
 #include <internal/codepage.h>
+#include <internal/win32con.h>
 #include <internal/getenv.h>
 #include <internal/base64.h>
 #include <internal/utf8.h>
+
+#include <chrono>
 
 namespace tvision
 {
@@ -51,17 +54,26 @@ static const const_unordered_map<ushort, constarray<ushort, 3>> moddedKeyCodes =
     { kbIns, {kbShiftIns, kbCtrlIns, kbAltIns} }, { kbDel, {kbShiftDel, kbCtrlDel, kbAltDel} },
 };
 
+static ushort getModdedKeyCode(ushort keyCode, ushort tvMods)
+{
+    // Modifier precedece: Shift < Ctrl < Alt.
+    int largestMod = (tvMods & kbLeftAlt) ? 2
+                   : (tvMods & kbLeftCtrl) ? 1
+                   : 0;
+    return moddedKeyCodes[keyCode][largestMod];
+}
+
 const uint XTermModDefault = 1;
 
 static KeyDownEvent keyWithXTermMods(ushort keyCode, uint mods) noexcept
 {
     mods -= XTermModDefault;
-    ushort tvmods =
+    ushort tvMods =
           (kbShift & -(mods & 1))
-        | (kbAltShift & -(mods & 2))
-        | (kbCtrlShift & -(mods & 4))
+        | (kbLeftAlt & -(mods & 2))
+        | (kbLeftCtrl & -(mods & 4))
         ;
-    KeyDownEvent keyDown {{keyCode}, tvmods};
+    KeyDownEvent keyDown {{keyCode}, tvMods};
     TermIO::normalizeKey(keyDown);
     return keyDown;
 }
@@ -69,6 +81,11 @@ static KeyDownEvent keyWithXTermMods(ushort keyCode, uint mods) noexcept
 static bool isAlpha(uint32_t ascii) noexcept
 {
     return ' ' <= ascii && ascii < 127;
+};
+
+static bool isAsciiLetter(uint32_t ch) noexcept
+{
+    return ('A' <= ch && ch <= 'Z') || ('a' <= ch && ch <= 'z');
 };
 
 static bool isPrivate(uint32_t codepoint) noexcept
@@ -176,101 +193,183 @@ static bool keyFromLetter(uint letter, uint mod, KeyDownEvent &keyDown) noexcept
     return true;
 }
 
+void GetChBuf::reject() noexcept
+{
+    while (size)
+        unget();
+}
+
+// getNum, getInt: INVARIANT: the last non-digit read key (or -1)
+// can be accessed with 'last()' and can also be ungetted.
+
+bool GetChBuf::getNum(uint &result) noexcept
+{
+    uint num = 0, digits = 0;
+    int k;
+    while ((k = get(true)) != -1 && '0' <= k && k <= '9')
+    {
+        num = 10 * num + (k - '0');
+        ++digits;
+    }
+    if (digits)
+        return (result = num), true;
+    return false;
+}
+
+bool GetChBuf::getInt(int &result) noexcept
+{
+    int num = 0, digits = 0, sign = 1;
+    int k = get(true);
+    if (k == '-')
+    {
+        sign = -1;
+        k = get(true);
+    }
+    while (k != -1 && '0' <= k && k <= '9')
+    {
+        num = 10 * num + (k - '0');
+        ++digits;
+        k = get(true);
+    }
+    if (digits)
+        return (result = sign*num), true;
+    return false;
+}
+
+bool GetChBuf::readStr(TStringView str) noexcept
+{
+    size_t origSize = size;
+    size_t i = 0;
+    while (i < str.size() && get() == str[i])
+        ++i;
+    if (i == str.size())
+        return true;
+    while (origSize < size)
+        unget();
+    return false;
+}
+
+bool CSIData::readFrom(GetChBuf &buf) noexcept
+// Pre: "\x1B[" has just been read.
+{
+    for (uint i = 0; i < maxLength; ++i)
+    {
+        if (!buf.getNum(_values[i]))
+            _values[i] = UINT_MAX;
+        int k = buf.last();
+        if (k == -1)
+            // No more input and CSI is not yet complete.
+            return false;
+        if (k == ';' || k == ':')
+            _separators[i] = (char) k;
+        else
+        {
+            terminator = (char) k;
+            length = i + 1;
+            return true;
+        }
+    }
+    // CSI may be longer than supported.
+    return false;
+}
+
 // The default mouse experience with Ncurses is not always good. To work around
 // some issues, we request and parse mouse events manually.
 
-void TermIO::mouseOn(StdioCtl &io) noexcept
+void TermIO::mouseOn(ConsoleCtl &con) noexcept
 {
     TStringView seq = "\x1B[?1001s" // Save old highlight mouse reporting.
                       "\x1B[?1000h" // Enable mouse reporting.
                       "\x1B[?1002h" // Enable mouse drag reporting.
                       "\x1B[?1006h" // Enable SGR extended mouse reporting.
                     ;
-    io.write(seq.data(), seq.size());
+    con.write(seq.data(), seq.size());
 }
 
-void TermIO::mouseOff(StdioCtl &io) noexcept
+void TermIO::mouseOff(ConsoleCtl &con) noexcept
 {
     TStringView seq = "\x1B[?1006l" // Disable SGR extended mouse reporting.
                       "\x1B[?1002l" // Disable mouse drag reporting.
                       "\x1B[?1000l" // Disable mouse reporting.
                       "\x1B[?1001r" // Restore old highlight mouse reporting.
                     ;
-    io.write(seq.data(), seq.size());
+    con.write(seq.data(), seq.size());
 }
 
-void TermIO::keyModsOn(StdioCtl &io) noexcept
+void TermIO::keyModsOn(ConsoleCtl &con) noexcept
 {
-    // https://invisible-island.net/xterm/ctlseqs/ctlseqs.html
-    // https://sw.kovidgoyal.net/kitty/keyboard-protocol.html
-    TStringView seq = "\x1B[?1036s" // Save metaSendsEscape (XTerm).
-                      "\x1B[?1036h" // Enable metaSendsEscape (XTerm).
-                      "\x1B[?2004s" // Save bracketed paste.
-                      "\x1B[?2004h" // Enable bracketed paste.
-                      "\x1B[>4;1m"  // Enable modifyOtherKeys (XTerm).
-                      "\x1B[>1u"    // Disambiguate escape codes (Kitty).
-                      far2lEnableSeq
-                    ;
-    io.write(seq.data(), seq.size());
+    char buf[256];
+
+    strcpy(buf,
+        "\x1B[?1036s"   // Save metaSendsEscape (XTerm).
+        "\x1B[?1036h"   // Enable metaSendsEscape (XTerm).
+        "\x1B[?2004s"   // Save bracketed paste.
+        "\x1B[?2004h"   // Enable bracketed paste.
+        "\x1B[>4;1m"    // Enable modifyOtherKeys (XTerm).
+        "\x1B[>5u"      // Disambiguate escape codes (1) + Report alternate keys (4) (Kitty).
+        "\x1B[?9001h"   // Enable win32-input-mode (Conpty).
+        far2lEnableSeq  // Enable far2l terminal extensions.
+    );
+
     if (char *term = getenv("TERM"))
     {
         // Check for full OSC 52 clipboard support.
         if (strstr(term, "alacritty") || strstr(term, "foot"))
-            // Request clipboard contents to see if they are readable. It is
-            // not safe to print this blindly so only do it for TERMs which
-            // we know should work.
-            seq = "\x1B]52;;?\x07";
+            strcat(buf,
+                // Request clipboard contents to see if they are readable. It is
+                // not safe to print this blindly so only do it for TERMs which
+                // we know should work.
+                "\x1B]52;;?\x07"
+            );
         else
-            seq =
+            strcat(buf,
                 // Check for the 'kitty-query-clipboard_control' capability (XTGETTCAP).
                 "\x1BP+q6b697474792d71756572792d636c6970626f6172645f636f6e74726f6c\x1B\\"
                 // Check for 'allowWindowOps' (XTQALLOWED).
                 "\x1B]60\x1B\\"
-                ;
-        io.write(seq.data(), seq.size());
+            );
     }
+
+    strcat(buf,
+        // Some terminals do not recognize the sequences above and will display
+        // them on screen. Clear the screen to prevent this.
+        "\x1B[2J"
+    );
+
+    con.write(buf, strlen(buf));
 }
 
-void TermIO::keyModsOff(StdioCtl &io, EventSource &source, InputState &state) noexcept
+void TermIO::keyModsOff(ConsoleCtl &con) noexcept
 {
-    TStringView seq = far2lPingSeq
-                      far2lDisableSeq
+    TStringView seq = far2lDisableSeq
+                      "\x1B[?9001l" // Disable win32-input-mode (Conpty).
                       "\x1B[<u"     // Restore previous keyboard mode (Kitty).
                       "\x1B[>4m"    // Reset modifyOtherKeys (XTerm).
                       "\x1B[?2004l" // Disable bracketed paste.
                       "\x1B[?2004r" // Restore bracketed paste.
                       "\x1B[?1036r" // Restore metaSendsEscape (XTerm).
                     ;
-    io.write(seq.data(), seq.size());
-    // If we are running across a slow connection, it is highly likely that
-    // far2l will send us keyUp or mouse events before extensions get disabled.
-    // Therefore, discard events until we get a ping response.
-    waitFar2lPing(source, state);
+    con.write(seq.data(), seq.size());
 }
 
 void TermIO::normalizeKey(KeyDownEvent &keyDown) noexcept
 {
-    TKey key(keyDown);
-    if (key.mods & (kbShift | kbCtrlShift | kbAltShift))
-    {
-        // Modifier precedece: Shift < Ctrl < Alt.
-        int largestMod = (key.mods & kbAltShift) ? 2
-                       : (key.mods & kbCtrlShift) ? 1
-                       : 0;
-        if (ushort keyCode = moddedKeyCodes[key.code][largestMod])
+    TKey tKey(keyDown);
+    ushort newMods = tKey.mods & (kbShift | kbLeftCtrl | kbLeftAlt);
+    if (newMods != 0)
+        if (ushort keyCode = getModdedKeyCode(tKey.code, newMods))
         {
             keyDown.keyCode = keyCode;
             if (keyDown.charScan.charCode < ' ')
                 keyDown.textLength = 0;
         }
-    }
     // TKey does not distinguish left/right modifiers, so preserve those
     // when available.
     ushort origMods = keyDown.controlKeyState;
     keyDown.controlKeyState =
-        ((origMods | key.mods) & ~(kbCtrlShift | kbAltShift))
-      | ((origMods & kbCtrlShift ? origMods : key.mods) & kbCtrlShift)
-      | ((origMods & kbAltShift ? origMods : key.mods) & kbAltShift)
+        ((origMods | newMods) & ~(kbCtrlShift | kbAltShift))
+      | ((origMods & kbCtrlShift ? origMods : newMods) & kbCtrlShift)
+      | ((origMods & kbAltShift ? origMods : newMods) & kbAltShift)
         ;
 }
 
@@ -307,10 +406,17 @@ ParseResult TermIO::parseEscapeSeq(GetChBuf &buf, TEvent &ev, InputState &state)
                     CSIData csi;
                     if (csi.readFrom(buf))
                     {
-                        if (csi.terminator() == 'u')
-                            return parseFixTermKey(csi, ev);
-                        else
-                            return parseCSIKey(csi, ev, state);
+                        switch (csi.terminator)
+                        {
+                            case 'u':
+                                return parseKittyKey(csi, ev);
+                            case 'R':
+                                return parseCPR(csi, state);
+                            case '_':
+                                return parseWin32InputModeKeyOrEscapeSeq(csi, buf.in, ev, state);
+                            default:
+                                return parseCSIKey(csi, ev, state);
+                        }
                     }
                     break;
                 }
@@ -326,7 +432,7 @@ ParseResult TermIO::parseEscapeSeq(GetChBuf &buf, TEvent &ev, InputState &state)
             res = parseEscapeSeq(buf, ev, state);
             if (res == Accepted && ev.what == evKeyDown)
             {
-                ev.keyDown.controlKeyState |= kbAltShift;
+                ev.keyDown.controlKeyState |= kbLeftAlt;
                 normalizeKey(ev.keyDown);
             }
             break;
@@ -458,10 +564,10 @@ ParseResult TermIO::parseCSIKey(const CSIData &csi, TEvent &ev, InputState &stat
 // https://invisible-island.net/xterm/xterm-function-keys.html
 // https://invisible-island.net/xterm/ctlseqs/ctlseqs.html
 {
-    uint terminator = csi.terminator();
+    uint terminator = csi.terminator;
     if (csi.length == 1 && terminator == '~')
     {
-        switch (csi.val[0])
+        switch (csi.getValue(0))
         {
             case 1: ev.keyDown = {{kbHome}}; break;
             case 2: ev.keyDown = {{kbIns}}; break;
@@ -497,15 +603,15 @@ ParseResult TermIO::parseCSIKey(const CSIData &csi, TEvent &ev, InputState &stat
             default: return Rejected;
         }
     }
-    else if (csi.length == 1 && csi.val[0] == 1)
+    else if (csi.length == 1 && csi.getValue(0) == 1)
     {
         if (!keyFromLetter(terminator, XTermModDefault, ev.keyDown))
             return Rejected;
     }
-    else if (csi.length == 2)
+    else if (csi.length == 2 && csi.getSeparator(0) == ';')
     {
-        uint mod = csi.val[1];
-        if (csi.val[0] == 1)
+        uint mod = csi.getValue(1);
+        if (csi.getValue(0) == 1)
         {
             if (!keyFromLetter(terminator, mod, ev.keyDown))
                 return Rejected;
@@ -513,7 +619,7 @@ ParseResult TermIO::parseCSIKey(const CSIData &csi, TEvent &ev, InputState &stat
         else if (terminator == '~')
         {
             ushort keyCode = 0;
-            switch (csi.val[0])
+            switch (csi.getValue(0))
             {
                 case  2: keyCode = kbIns; break;
                 case  3: keyCode = kbDel; break;
@@ -534,16 +640,20 @@ ParseResult TermIO::parseCSIKey(const CSIData &csi, TEvent &ev, InputState &stat
                 case 29: keyCode = kbNoKey; break; // Menu key (XTerm).
                 default: return Rejected;
             }
-            ev.keyDown = keyWithXTermMods(keyCode, csi.val[1]);
+            ev.keyDown = keyWithXTermMods(keyCode, csi.getValue(1));
         }
         else
             return Rejected;
     }
-    else if (csi.length == 3 && csi.val[0] == 27 && terminator == '~')
+    else if ( csi.length == 3 &&
+              csi.getValue(0) == 27 &&
+              csi.getSeparator(0) == ';' &&
+              csi.getSeparator(1) == ';' &&
+              terminator == '~' )
     {
         // XTerm's "modifyOtherKeys" mode.
-        uint key = csi.val[2];
-        uint mod = csi.val[1];
+        uint key = csi.getValue(2);
+        uint mod = csi.getValue(1);
         if (!keyFromCodepoint(key, mod, ev.keyDown))
             return Ignored;
     }
@@ -566,22 +676,73 @@ ParseResult TermIO::parseSS3Key(GetChBuf &buf, TEvent &ev) noexcept
     return Accepted;
 }
 
-ParseResult TermIO::parseFixTermKey(const CSIData &csi, TEvent &ev) noexcept
+ParseResult TermIO::parseKittyKey(const CSIData &csi, TEvent &ev) noexcept
 // https://sw.kovidgoyal.net/kitty/keyboard-protocol.html
 // http://www.leonerd.org.uk/hacks/fixterms/
 {
-
-    if (csi.length < 1 || csi.terminator() != 'u')
+    if (csi.length < 1 || csi.terminator != 'u')
         return Rejected;
 
-    uint key = csi.val[0];
-    uint mods = (csi.length > 1) ? max(csi.val[1], 1) : 1;
-    if (keyFromCodepoint(key, mods, ev.keyDown))
+    // NOTE: We are not requesting all of Kitty's Keyboard Protocol features in
+    // keyModsOn(), yet this code supports them.
+    //
+    // Kitty events are structured like:
+    //
+    // unicode-key-code : shifted-key-code : base-layout-key ; modifiers : event-type ; text-as-codepoints u
+    //
+    // Only the 'unicode-key-code' is mandatory; the rest are optional.
+
+    uint kittyKeyCode = 0;
+    uint kittyShiftedKeyCode = 0;
+    uint kittyBaseLayoutKey = 0;
+    uint kittyModifiers = 1;
+    uint kittyEventType = 1;
+    uint kittyText = 0;
+
+    uint i = 0;
+    kittyKeyCode = csi.getValue(i++, 0);
+    if (i < csi.length && csi.getSeparator(i - 1) == ':')
+        kittyShiftedKeyCode = csi.getValue(i++, 0);
+    if (i < csi.length && csi.getSeparator(i - 1) == ':')
+        kittyBaseLayoutKey = csi.getValue(i++, 0);
+    if (i < csi.length)
+        kittyModifiers = csi.getValue(i++, 1);
+    if (i < csi.length && csi.getSeparator(i - 1) == ':')
+        kittyEventType = csi.getValue(i++, 1);
+    if (i < csi.length)
+        // In theory, there could be more than one character, but we
+        // do not currently support this, so just take the first one.
+        kittyText = csi.getValue(i++, 0);
+
+    if (kittyEventType != 1)
+        // We are only interested in Press events.
+        return Ignored;
+
+    uint codepoint = kittyKeyCode;
+    if (kittyText != 0)
+        codepoint = kittyText;
+    else if (kittyShiftedKeyCode != 0)
+        codepoint = kittyShiftedKeyCode;
+
+    if (!keyFromCodepoint(codepoint, kittyModifiers, ev.keyDown))
+        return Ignored;
+
+    // When the unicode-key-code isn't an ASCII letter, but the base-layout-key
+    // is, and at the same time the Ctrl or Alt modifiers are present,
+    // initialize the event's keyCode as if it was Ctrl/Alt + A-Z, so that
+    // standard keyboard shortcuts can still be triggered when using a non-ASCII
+    // keyboard layout (e.g. Ctrl+Ф in the RU keyboard layout will match Ctrl+A).
+    if ( !isAsciiLetter(kittyKeyCode) && isAsciiLetter(kittyBaseLayoutKey) &&
+         (ev.keyDown.controlKeyState & (kbCtrlShift | kbAltShift)) != 0 )
     {
-        ev.what = evKeyDown;
-        return Accepted;
+        // Kitty's 'base-layout-key' is always in lowercase,
+        char upperBaseLayoutKey = kittyBaseLayoutKey - 'a' + 'A';
+        ev.keyDown.keyCode = getModdedKeyCode(upperBaseLayoutKey, ev.keyDown.controlKeyState);
+        // Note that 'ev.keyDown.text' still contains the original key text.
     }
-    return Ignored;
+
+    ev.what = evKeyDown;
+    return Accepted;
 }
 
 ParseResult TermIO::parseDCS(GetChBuf &buf, InputState &state) noexcept
@@ -630,7 +791,109 @@ ParseResult TermIO::parseOSC(GetChBuf &buf, InputState &state) noexcept
     return Ignored;
 }
 
-static bool setOsc52Clipboard(StdioCtl &io, TStringView text, InputState &state) noexcept
+ParseResult TermIO::parseCPR(const CSIData &csi, InputState &state) noexcept
+// Pre: csi.terminator == 'R'.
+// We receive a Cursor Position Report as response to the Device Status Report
+// request we make in 'consumeUnprocessedInput()'.
+{
+    if (csi.length != 2 || csi.getSeparator(0) != ';')
+        return Rejected;
+
+    state.gotDsrResponse = true;
+    return Ignored;
+}
+
+static ParseResult parseWin32InputModeKey(const CSIData &csi, TEvent &ev, InputState &state) noexcept
+// https://github.com/microsoft/terminal/blob/main/doc/specs/%234999%20-%20Improved%20keyboard%20handling%20in%20Conpty.md
+{
+    KEY_EVENT_RECORD kev;
+    kev.wVirtualKeyCode = (ushort) csi.getValue(0, 0);
+    kev.wVirtualScanCode = (ushort) csi.getValue(1, 0);
+    kev.uChar.UnicodeChar = (ushort) csi.getValue(2, 0);
+    kev.bKeyDown = (ushort) csi.getValue(3, 0);
+    kev.dwControlKeyState = (ushort) csi.getValue(4, 0);
+    kev.wRepeatCount = (ushort) csi.getValue(5, 1);
+
+    regenerateMissingScanCodeFromVirtualKeyCode(kev);
+
+    if (kev.bKeyDown && getWin32Key(kev, ev, state))
+    {
+        TermIO::normalizeKey(ev.keyDown);
+        return Accepted;
+    }
+    return Ignored;
+}
+
+// Due to issue https://github.com/microsoft/terminal/issues/15083, Conpty will
+// emit ANSI escape sequences wrapped in win32-input-mode events. This class
+// allows handling these sequences properly.
+
+class Win32InputModeUnwrapper : public InputGetter
+{
+    InputGetter &in;
+    InputState &state;
+
+    enum { maxSize = 31 };
+
+    ushort ungetSize {0};
+    short ungetBuffer[maxSize];
+
+public:
+
+    Win32InputModeUnwrapper(InputGetter &aIn, InputState &aState) noexcept :
+        in(aIn), state(aState)
+    {
+    }
+
+    int get() noexcept override
+    {
+        if (ungetSize > 0)
+            return ungetBuffer[--ungetSize];
+
+        GetChBuf buf(in);
+        CSIData csi;
+        TEvent ev {};
+        // If we get a win32-input-mode event with no scan code and
+        // a single-byte character, take just that character.
+        if ( buf.get() == '\x1B' && buf.get() == '['
+             && csi.readFrom(buf) && csi.terminator == '_'
+             && parseWin32InputModeKey(csi, ev, state) == Accepted
+             && ev.keyDown.charScan.scanCode == 0
+             && ev.keyDown.textLength == 1 )
+            return (uchar) ev.keyDown.text[0];
+        buf.reject();
+        return -1;
+    }
+
+    void unget(int key) noexcept override
+    {
+        // We could reconstruct the original win32-input-mode event and call
+        // 'in.unget()', but there is no need for that. However, we still need
+        // to be able to temporarily store characters returned by 'get()'.
+        if (ungetSize < maxSize)
+            ungetBuffer[ungetSize++] = (short) key;
+    }
+};
+
+ParseResult TermIO::parseWin32InputModeKeyOrEscapeSeq(const CSIData &csi, InputGetter &in, TEvent &ev, InputState &state) noexcept
+// Pre: csi.terminator == '_'.
+{
+    ParseResult res = parseWin32InputModeKey(csi, ev, state);
+    if (res == Accepted && ev.keyDown == 0x001B)
+    {
+        // We received the initiator of an escape sequence wrapped in
+        // win32-input-mode events.
+        Win32InputModeUnwrapper unwrapper(in, state);
+        GetChBuf buf(unwrapper);
+        res = parseEscapeSeq(buf, ev, state);
+        // Avoid propagating 'Rejected' because we have used a secondary GetChBuf.
+        if (res != Accepted)
+            res = Ignored;
+    }
+    return res;
+}
+
+static bool setOsc52Clipboard(ConsoleCtl &con, TStringView text, InputState &state) noexcept
 {
     TStringView prefix = "\x1B]52;;";
     TStringView suffix = "\x07";
@@ -639,7 +902,7 @@ static bool setOsc52Clipboard(StdioCtl &io, TStringView text, InputState &state)
         memcpy(buf, prefix.data(), prefix.size());
         TStringView b64 = encodeBase64(text, buf + prefix.size());
         memcpy(buf + prefix.size() + b64.size(), suffix.data(), suffix.size());
-        io.write(buf, prefix.size() + b64.size() + suffix.size());
+        con.write(buf, prefix.size() + b64.size() + suffix.size());
         free(buf);
     }
     // Return false when there is no full OSC 52 support, even though we always
@@ -647,28 +910,28 @@ static bool setOsc52Clipboard(StdioCtl &io, TStringView text, InputState &state)
     return state.hasFullOsc52;
 }
 
-static bool requestOsc52Clipboard(StdioCtl &io, InputState &state) noexcept
+static bool requestOsc52Clipboard(ConsoleCtl &con, InputState &state) noexcept
 {
     if (state.hasFullOsc52)
     {
         TStringView seq = "\x1B]52;;?\x07";
-        io.write(seq.data(), seq.size());
+        con.write(seq.data(), seq.size());
         return true;
     }
     return false;
 }
 
-bool TermIO::setClipboardText(StdioCtl &io, TStringView text, InputState &state) noexcept
+bool TermIO::setClipboardText(ConsoleCtl &con, TStringView text, InputState &state) noexcept
 {
-    return setFar2lClipboard(io, text, state)
-        || setOsc52Clipboard(io, text, state);
+    return setFar2lClipboard(con, text, state)
+        || setOsc52Clipboard(con, text, state);
 }
 
-bool TermIO::requestClipboardText(StdioCtl &io, void (&accept)(TStringView), InputState &state) noexcept
+bool TermIO::requestClipboardText(ConsoleCtl &con, void (&accept)(TStringView), InputState &state) noexcept
 {
     state.putPaste = &accept;
-    return requestFar2lClipboard(io, state)
-        || requestOsc52Clipboard(io, state);
+    return requestFar2lClipboard(con, state)
+        || requestOsc52Clipboard(con, state);
 }
 
 char *TermIO::readUntilBelOrSt(GetChBuf &buf) noexcept
@@ -676,10 +939,10 @@ char *TermIO::readUntilBelOrSt(GetChBuf &buf) noexcept
 {
     size_t capacity = 1024;
     size_t len = 0;
-    char prev = '\0';
     if (char *s = (char *) malloc(capacity))
     {
-        char c;
+        int prev = '\0';
+        int c;
         while (c = buf.getUnbuffered(), c != -1)
         {
             if (c == '\x07') // BEL
@@ -697,7 +960,7 @@ char *TermIO::readUntilBelOrSt(GetChBuf &buf) noexcept
                     s = (free(s), nullptr);
             }
             if (s)
-                s[len++] = c;
+                s[len++] = (char) c;
             prev = c;
         }
         if (s)
@@ -705,6 +968,33 @@ char *TermIO::readUntilBelOrSt(GetChBuf &buf) noexcept
         return s;
     }
     return {};
+}
+
+void TermIO::consumeUnprocessedInput(ConsoleCtl &con, InputGetter &in, InputState &state) noexcept
+// The terminal might have kept sending us events while the application is
+// exiting. This is especially likely to happen when the application is running
+// remotely accross a slow connection and terminal extensions are in place
+// which report key release events (e.g. far2l and win32-input-mode), or when
+// the application gets killed by a signal while the user was dragging the mouse.
+// Therefore, we print a DSR request and attempt to read events until we get a
+// response to it. This has to be done after disabling keyboard and mouse extensions.
+{
+    using namespace std::chrono;
+    auto timeout = milliseconds(200);
+
+    TStringView seq = "\x1B[6n"; // Device Status Report.
+    con.write(seq.data(), seq.size());
+
+    TEvent ev {};
+    state.gotDsrResponse = false;
+    auto begin = steady_clock::now();
+    do
+    {
+        GetChBuf buf {in};
+        parseEvent(buf, ev, state);
+    }
+    while ( !state.gotDsrResponse &&
+            (steady_clock::now() - begin <= timeout) );
 }
 
 } // namespace tvision

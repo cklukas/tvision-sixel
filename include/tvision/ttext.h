@@ -40,9 +40,25 @@ public:
     // position 'index'.
     static size_t prev(TStringView text, size_t index) noexcept;
 
-    // Converts the first character in 'text' to the current code page.
-    // If there is no possible converion or 'text' is empty, returns '\0'.
+    // Compares two strings ignoring the case differences. Also takes into
+    // account characters encoded in extended ASCII.
+    static Boolean equalsIgnoreCase(TStringView a, TStringView b) noexcept;
+
+    // Converts the first character in 'text' to a code page character.
+    // If the character cannot be converted or 'text' is empty, returns '\0'.
     static char toCodePage(TStringView text) noexcept;
+
+#if !defined(__BORLANDC__)
+    // Converts the code page character 'c' into UTF-8. The returned view
+    // remains valid until the next call to 'setCodePageTranslation()'.
+    static TStringView fromCodePage(char c) noexcept;
+
+    // Modifies the internal table used to convert code page characters
+    // to and from UTF-8. By default, code page 437 (United States) is used.
+    // If a null pointer is provided, the internal conversion table is reset
+    // to the default one.
+    static void setCodePageTranslation(const char (*utf8Translation)[256][4]) noexcept;
+#endif // __BORLANDC__
 
     // Returns the length in bytes of a leading substring of 'text' which is
     // 'count' columns wide. If 'text' is less than 'count' columns wide,
@@ -188,6 +204,13 @@ inline size_t TText::prev(TStringView text, size_t index)
     return 0 < index && index <= text.size();
 }
 
+inline Boolean TText::equalsIgnoreCase(TStringView a, TStringView b)
+{
+    if (a.size() != b.size())
+        return False;
+    return Boolean( a.empty() || memicmp(a.begin(), b.begin(), a.size()) == 0 );
+}
+
 inline char TText::toCodePage(TStringView text)
 {
     if (text.empty())
@@ -226,13 +249,19 @@ inline void TText::drawChar(TSpan<TScreenCell> cells, char c, TColorAttr attr)
 inline size_t TText::drawStr( TSpan<TScreenCell> cells, size_t indent,
                               TStringView text, int textIndent )
 {
+    // BCC optimization: avoid using min/substr/subspan and use pointer-range loop.
     if (indent < cells.size() && textIndent < text.size())
     {
-        cells = cells.subspan(indent);
-        text = text.substr(textIndent);
-        size_t count = min(cells.size(), text.size());
-        for (size_t i = 0; i < count; ++i)
-            ::setChar(cells[i], text[i]);
+        size_t count = cells.size() - indent;
+        if (text.size() < count)
+            count = text.size();
+
+        TScreenCell *dest = &cells[indent];
+        const char *src = &text[textIndent];
+        const char *end = &text[textIndent + count];
+        for (; src != end; ++dest, ++src)
+            *(uchar *)dest = *src;
+
         return count;
     }
     return 0;
@@ -242,13 +271,22 @@ inline size_t TText::drawStr( TSpan<TScreenCell> cells, size_t indent,
                               TStringView text, int textIndent,
                               TColorAttr attr )
 {
+    // BCC optimization: avoid using min/substr/subspan and use pointer-range loop.
     if (indent < cells.size() && textIndent < text.size())
     {
-        cells = cells.subspan(indent);
-        text = text.substr(textIndent);
-        size_t count = min(cells.size(), text.size());
-        for (size_t i = 0; i < count; ++i)
-            ::setCell(cells[i], text[i], attr);
+        size_t count = cells.size() - indent;
+        if (text.size() < count)
+            count = text.size();
+
+        TScreenCell *dest = &cells[indent];
+        const char *src = &text[textIndent];
+        const char *end = &text[textIndent + count];
+        for (; src != end; ++dest, ++src)
+        {
+            ((uchar *) dest)[0] = *src;
+            ((uchar *) dest)[1] = attr;
+        }
+
         return count;
     }
     return 0;

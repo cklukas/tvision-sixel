@@ -50,6 +50,11 @@ public:
     ~THardwareInfo();
 
     static uint32_t getTickCount() noexcept;
+#if defined( __BORLANDC__ )
+    static uint32_t getTickCountMs();
+#else
+    static uint64_t getTickCountMs() noexcept;
+#endif
 
 #if defined( __FLAT__ )
 
@@ -90,8 +95,8 @@ public:
     static BOOL getMouseEvent( MouseEventType& event ) noexcept;
     static BOOL getKeyEvent( TEvent& event ) noexcept;
     static void clearPendingEvent() noexcept;
-    static void waitForEvent( int timeoutMs ) noexcept;
-    static void stopEventWait() noexcept;
+    static void waitForEvents( int timeoutMs ) noexcept;
+    static void interruptEventWait() noexcept;
     static BOOL setClipboardText( TStringView text ) noexcept;
     static BOOL requestClipboardText( void (&accept)( TStringView ) ) noexcept;
 
@@ -257,18 +262,14 @@ inline BOOL THardwareInfo::setCtrlBrkHandler( BOOL install ) noexcept
 #ifdef _WIN32
     return SetConsoleCtrlHandler( &THardwareInfo::ctrlBreakHandler, install );
 #else
-/* Sets THardwareInfo::ctrlBreakHandle as the handler of control signals
- * CTRL_C_EVENT and CTRL_BREAK_EVENT. When the signal is received, the
- * handler sets the attribute TSystemError::ctrlBreakHit to true.
- * https://docs.microsoft.com/en-us/windows/console/handlerroutine
- */
-    // Stub
+    (void) install;
     return TRUE;
 #endif
 }
 
 inline BOOL THardwareInfo::setCritErrorHandler( BOOL install ) noexcept
 {
+    (void) install;
     return TRUE;        // Handled by NT or DPMI32..
 }
 
@@ -283,6 +284,9 @@ inline ushort *THardwareInfo::getMonoAddr( ushort offset )
 
 inline uint32_t THardwareInfo::getTickCount()
     { return *(uint32_t *) MAKELONG( biosSel, 0x6C ); }
+
+inline uint32_t THardwareInfo::getTickCountMs()
+    { return getTickCount() * 55; }
 
 inline uchar THardwareInfo::getShiftState()
     { return *(uchar *) MAKELONG( biosSel, 0x17 ); }

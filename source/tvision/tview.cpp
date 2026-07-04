@@ -33,9 +33,9 @@
 #endif  // __LIMITS_H
 
 TPoint shadowSize = {2,1};
-uchar shadowAttr = 0x08;
+TColorAttr shadowAttr = 0x08;
 Boolean _NEAR TView::showMarkers = False;
-uchar _NEAR TView::errorAttr = 0xCF;
+TColorAttr _NEAR TView::errorAttr = 0xCF;
 Boolean _NEAR TView::commandSetChanged = False;
 
 extern TView *TheTopView;
@@ -396,6 +396,8 @@ void TView::drawUnderView( Boolean doShadow, TView* lastView )
     TRect r = getBounds();
     if( doShadow != False )
         r.b += shadowSize;
+    if( (options & ofFramed) != 0 )
+        r.grow(1, 1);
     drawUnderRect( r, lastView );
 }
 
@@ -479,7 +481,7 @@ TRect TView::getClipRect() const noexcept
     return clip;
 }
 
-TAttrPair TView::getColor( ushort color ) noexcept
+TAttrPair TView::getColor( ushort color )
 {
     TAttrPair colorPair = color >> 8;
 
@@ -508,12 +510,12 @@ void TView::getEvent( TEvent& event )
 
 void TView::getEvent( TEvent& event, int timeoutMs )
 {
-    int saveTimeout = TProgram::eventTimeout;
-    TProgram::eventTimeout = timeoutMs;
+    int saveTimeout = TProgram::eventTimeoutMs;
+    TProgram::eventTimeoutMs = timeoutMs;
 
     getEvent( event );
 
-    TProgram::eventTimeout = saveTimeout;
+    TProgram::eventTimeoutMs = saveTimeout;
 }
 
 TRect TView::getExtent() const noexcept
@@ -725,12 +727,13 @@ void TView::putInFrontOf( TView *Target )
 
 void TView::select()
 {
-    if( ! (options & ofSelectable))
-	return;
-    if( (options & ofTopSelect) != 0 )
-        makeFirst();
-    else if( owner != 0 )
-        owner->setCurrent( this, normalSelect );
+    if( (options & ofSelectable) != 0 && owner != 0 )
+        {
+        if( (options & ofTopSelect) != 0 )
+            makeFirst();
+        else
+            owner->setCurrent( this, normalSelect );
+        }
 }
 
 void TView::setBounds( const TRect& bounds ) noexcept

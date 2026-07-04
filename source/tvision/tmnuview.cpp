@@ -20,6 +20,7 @@
 #define Uses_TEvent
 #define Uses_TGroup
 #define Uses_TMenuBox
+#define Uses_TText
 #define Uses_opstream
 #define Uses_ipstream
 #include <tvision/tv.h>
@@ -128,7 +129,13 @@ void TMenuView::prevItem()
 void TMenuView::trackKey( Boolean findNext )
 {
     if( current == 0 )
-        return;
+        {
+        current = menu->items;
+        if( !findNext )
+            prevItem();
+        if( current->name != 0 )
+            return;
+        }
 
     do  {
         if( findNext )
@@ -174,7 +181,6 @@ ushort TMenuView::execute()
     Boolean    autoSelect = False;
     Boolean    firstEvent = True;
     menuAction action;
-    char   ch;
     ushort result = 0;
     TMenuItem *itemShown = 0;
     TMenuItem *p;
@@ -226,8 +232,8 @@ ushort TMenuView::execute()
                         {
                         if ( current != lastTargetItem )
                             action = doSelect;
-                        else if ( !parentMenu )
-                        // If a main menu entry was closed, exit and stop listening
+                        else if ( size.y == 1 )
+                        // If a menu bar entry was closed, exit and stop listening
                         // for events.
                             action = doReturn;
                         else
@@ -242,7 +248,7 @@ ushort TMenuView::execute()
                     }
                 else if ( mouseActive && !mouseInView(e.mouse.where) )
                     action = doReturn;
-                else if ( parentMenu )
+                else if ( size.y != 1 )
                 // When MouseUp happens inside the Box but not on a highlightable entry
                 // (e.g. on a margin, or a separator), either the default or the first
                 // entry will be automatically highlighted. This was added in Turbo Vision 2.0.
@@ -264,26 +270,26 @@ ushort TMenuView::execute()
                     // A menu bar entry closed by clicking on its name stays highlighted
                     // until MouseUp. If mouse drag is then performed and a different
                     // entry is selected, it will open up automatically.
-                    else if ( mouseActive && !parentMenu && current != lastTargetItem )
+                    else if ( size.y == 1 && mouseActive && current != lastTargetItem )
                         autoSelect = True;
                     }
                 break;
             case  evKeyDown:
-                switch( ctrlToArrow(e.keyDown.keyCode) )
+                switch( e.keyDown.keyCode )
                     {
                     case  kbUp:
                     case  kbDown:
                         if( size.y != 1 )
-                            trackKey(Boolean(ctrlToArrow(e.keyDown.keyCode) == kbDown));
+                            trackKey(Boolean(e.keyDown.keyCode == kbDown));
                         else if( e.keyDown.keyCode == kbDown )
                             autoSelect =  True;
                         break;
                     case  kbLeft:
                     case  kbRight:
-                        if( parentMenu == 0 )
-                            trackKey(Boolean(ctrlToArrow(e.keyDown.keyCode) == kbRight));
-                        else
-                            action =  doReturn;
+                        if( size.y == 1 )
+                            trackKey(Boolean(e.keyDown.keyCode == kbRight));
+                        else if( parentMenu != 0 )
+                            action = doReturn;
                         break;
                     case  kbHome:
                     case  kbEnd:
@@ -306,12 +312,13 @@ ushort TMenuView::execute()
                         break;
                     default:
                         target = this;
-                        ch = getAltChar(e.keyDown.keyCode);
-                        if( ch == 0 )
-                            ch = e.keyDown.charScan.charCode;
-                        else
+                        if( !getAltCharStr(e.keyDown).empty() )
+                            {
                             target = topMenu();
-                        p = target->findItem(ch);
+                            p = target->findAltShortcut(e.keyDown);
+                            }
+                        else
+                            p = findItem(e.keyDown.getText());
                         if( p == 0 )
                             {
                             p = topMenu()->hotKey(e.keyDown);
@@ -330,7 +337,7 @@ ushort TMenuView::execute()
                             }
                         else if( parentMenu != target ||
                                  parentMenu->current != p )
-                                action = doReturn;
+                            action = doReturn;
                     }
                 break;
             case  evCommand:
@@ -407,19 +414,35 @@ ushort TMenuView::execute()
 
 TMenuItem *TMenuView::findItem( char ch )
 {
-    ch = toupper(ch);
+    return findItem(TStringView(&ch, 1));
+}
+
+TMenuItem *TMenuView::findItem( TStringView ch )
+{
     TMenuItem *p = menu->items;
     while( p != 0 )
         {
-        if( p->name != 0 && !p->disabled )
-            {
-            char *loc = strchr( (char *) p->name, '~' );
-            if( loc != 0 && (uchar)ch == toupper( loc[1] ) )
-                return p;
-            }
+        TStringView shortcut = hotKeyStr(p->name);
+        if( !p->disabled &&
+            !shortcut.empty() &&
+            TText::equalsIgnoreCase(ch, hotKeyStr(p->name))
+          )
+            return p;
         p =  p->next;
         }
     return 0;
+}
+
+TMenuItem *TMenuView::findAltShortcut( const KeyDownEvent &keyDown )
+{
+    TMenuItem *p = 0;
+    // First, try to find a menu item that matches the KeyDownEvent's text.
+    if( !keyDown.getText().empty() )
+        p = findItem( getAltCharStr(keyDown) );
+    // If no match was found, try matching using the KeyDownEvent's key code.
+    if( p == 0 )
+        p = findItem( getAltChar(keyDown.keyCode) );
+    return p;
 }
 
 TRect TMenuView::getItemRect( TMenuItem * )
@@ -441,7 +464,7 @@ ushort TMenuView::getHelpCtx()
     if( c != 0 )
         return c->current->helpCtx;
     else
-        return hcNoContext;
+        return helpCtx;
 }
 
 TPalette& TMenuView::getPalette() const
@@ -501,7 +524,7 @@ void TMenuView::handleEvent( TEvent& event )
                 do_a_select(event);
                 break;
             case  evKeyDown:
-                if( findItem(getAltChar(event.keyDown.keyCode)) != 0 )
+                if( findAltShortcut(event.keyDown) != 0 )
                     do_a_select(event);
                 else
                     {

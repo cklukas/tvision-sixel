@@ -21,8 +21,8 @@ class SignalHandler
 
     enum HandledSignals
     {
-        SigInt, SigQuit, SigIll, SigAbrt, SigFpe, SigSegv, SigTerm, SigTstp,
-        HandledSignalCount
+        SigInt, SigQuit, SigIll, SigAbrt, SigBus, SigFpe, SigSegv, SigPipe,
+        SigTerm, SigTstp, HandledSignalCount
     };
 
 public:
@@ -54,7 +54,7 @@ private:
 
     static void handleSignal(int, siginfo_t *, void *);
     static HandlerInfo &getHandlerInfo(int) noexcept;
-    static bool invokeHandlerOrDefault(int, struct sigaction &, siginfo_t *, void *) noexcept;
+    static bool invokeHandlerOrDefault(int, const struct sigaction &, siginfo_t *, void *) noexcept;
     static bool invokeDefault(int, siginfo_t *) noexcept;
 
 public:
@@ -70,7 +70,7 @@ class SignalHandler
 {
 public:
 
-    static void enable(SignalHandlerCallback &aCallback) noexcept {}
+    static void enable(SignalHandlerCallback &) noexcept {}
     static void disable() noexcept {}
 };
 

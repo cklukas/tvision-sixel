@@ -166,7 +166,7 @@ class TInputLine : public TView
 
 public:
 
-    TInputLine( const TRect& bounds, uint limit, TValidator *aValid = 0, ushort limitMode = ilMaxBytes ) noexcept;
+    TInputLine( const TRect& bounds, int limit, TValidator *aValid = 0, ushort limitMode = ilMaxBytes ) noexcept;
     ~TInputLine();
 
     virtual ushort dataSize();
@@ -181,9 +181,9 @@ public:
     void setValidator( TValidator* aValid );
 
     char* data;
-    uint maxLen;
-    uint maxWidth;
-    uint maxChars;
+    int maxLen;
+    int maxWidth;
+    int maxChars;
     int curPos;
     int firstPos;
     int selStart;
@@ -300,7 +300,7 @@ private:
     void pressButton( TEvent& );
     TRect getActiveRect();
 
-    enum { animationDuration = 100 };
+    enum { animationDurationMs = 100 };
     TTimerId animationTimer;
 
     static const char * _NEAR shadows;
@@ -449,6 +449,7 @@ inline opstream& operator << ( opstream& os, TCluster* cl )
 /*        2 = Selected text                                               */
 /*        3 = Normal shortcut                                             */
 /*        4 = Selected shortcut                                           */
+/*        5 = Disabled text                                               */
 /* ---------------------------------------------------------------------- */
 
 
@@ -514,6 +515,7 @@ inline TRadioButtons::TRadioButtons( const TRect& bounds, TSItem *aStrings ) noe
 /*        2 = Selected text                                               */
 /*        3 = Normal shortcut                                             */
 /*        4 = Selected shortcut                                           */
+/*        5 = Disabled text                                               */
 /* ---------------------------------------------------------------------- */
 
 #if defined( Uses_TCheckBoxes ) && !defined( __TCheckBoxes )
@@ -586,6 +588,7 @@ const unsigned short cfOneBit       = 0x0101,
 /*        2 = Selected text                                               */
 /*        3 = Normal shortcut                                             */
 /*        4 = Selected shortcut                                           */
+/*        5 = Disabled text                                               */
 /* ---------------------------------------------------------------------- */
 
 class _FAR TRect;
@@ -635,6 +638,16 @@ inline opstream& operator << ( opstream& os, TMultiCheckBoxes* cl )
 
 #endif
 
+/* ---------------------------------------------------------------------- */
+/*      class TListBox                                                    */
+/*                                                                        */
+/*      Palette layout                                                    */
+/*        1 = Active                                                      */
+/*        2 = Inactive                                                    */
+/*        3 = Focused                                                     */
+/*        4 = Selected                                                    */
+/*        5 = Divider                                                     */
+/* ---------------------------------------------------------------------- */
 
 #if defined( Uses_TListBox ) && !defined( __TListBox )
 #define __TListBox
@@ -979,6 +992,14 @@ protected:
 };
 
 #endif  // Uses_THistoryWindow
+
+/* ---------------------------------------------------------------------- */
+/*      class THistory                                                    */
+/*                                                                        */
+/*      Palette layout                                                    */
+/*        1 = Arrow                                                       */
+/*        2 = Sides                                                       */
+/* ---------------------------------------------------------------------- */
 
 #if defined( Uses_THistory ) && !defined( __THistory )
 #define __THistory

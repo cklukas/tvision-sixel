@@ -17,7 +17,6 @@
 #define Uses_THardwareInfo
 #define Uses_TScreen
 #define Uses_TObject
-#define Uses_TMouse
 #define Uses_TApplication
 #define Uses_TDeskTop
 #include <tvision/tv.h>
@@ -26,17 +25,24 @@
 #include <stdlib.h>
 #include <signal.h>
 
-TStaticInit::TStaticInit() noexcept
+void initHistory();
+void doneHistory();
+
+TAppInit::TAppInit() noexcept
 {
-    // Construct on first use
+    // Initialize the subsystems needed for the application to work when first
+    // constructing a TApplication object.
+    //
+    // Originally, they were initialized statically at program startup,
+    // but that caused issues for applications that might be executed without
+    // a console or terminal (e.g., TVHC), and it could also lead to problems
+    // related to static initialization order.
     static THardwareInfo hwInfoManager;
+    static TMouse tms;
     static TScreen tsc;
     static TEventQueue teq;
     static TSystemError sysErr;
 }
-
-void initHistory();
-void doneHistory();
 
 TApplication::TApplication() noexcept :
     TProgInit( &TApplication::initStatusLine,

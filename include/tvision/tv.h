@@ -40,11 +40,14 @@
 #endif
 #if defined( _MSC_VER )
 #pragma warning(push)
-#pragma warning(disable: 4250)
+#pragma warning(disable: 4250) // Inheritance via dominance
+#pragma warning(disable: 4616) // Invalid #pragma warning number
+#pragma warning(disable: 26819) // Implicit fallthrough
 #endif
-#if defined( __clang__ )
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Woverloaded-virtual"
+#if defined( __GNUC__ )
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Woverloaded-virtual"
+#pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
 #endif
 
 #if !defined( __FLAT__ )
@@ -247,6 +250,7 @@
 
 #if defined( Uses_TDirListBox )
 #define Uses_TListBox
+#define Uses_TDirCollection
 #define __INC_STDDLG_H
 #endif
 
@@ -773,6 +777,6 @@
 #if defined( _MSC_VER )
 #pragma warning(pop)
 #endif
-#if defined( __clang__ )
-#pragma clang diagnostic pop
+#if defined( __GNUC__ )
+#pragma GCC diagnostic pop
 #endif

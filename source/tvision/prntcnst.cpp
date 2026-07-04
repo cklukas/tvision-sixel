@@ -128,6 +128,9 @@ static const TConstant eventCodes[] =
     NM(evKeyDown),
     NM(evCommand),
     NM(evBroadcast),
+    NM(evMouse),
+    NM(evKeyboard),
+    NM(evMessage),
     NMEND(),
 };
 

@@ -1,69 +1,41 @@
 #ifndef TVISION_CODEPAGE_H
 #define TVISION_CODEPAGE_H
 
-#ifndef _TV_VERSION
-#include <tvision/tv.h>
-#endif
-
-#include <unordered_map>
-#include <array>
+#include <stdint.h>
+#include <string.h>
 
 namespace tvision
 {
 
 class CpTranslator
 {
-
-    CpTranslator() noexcept;
-    static CpTranslator instance;
-
-    struct CpTable
-    {
-        TStringView cp;
-        const uint32_t *toUtf8Int;
-        const std::unordered_map<uint32_t, char> fromUtf8;
-
-        CpTable( TStringView cp,
-                 const TStringView toUtf8[256],
-                 const std::array<uint32_t, 256> &toUtf8Int ) noexcept;
-    };
-
-    static const CpTable tables[2];
-    static const CpTable *activeTable;
-
-    static void useTable(const CpTable *table) noexcept
-    {
-        activeTable = table;
-    }
+    static const char (*cpToUtf8)[256][4];
 
 public:
 
-    static void use(TStringView cp) noexcept
+    static void setTranslation(const char (*translation)[256][4]) noexcept;
+
+    static const char (&toUtf8(unsigned char c) noexcept)[4]
     {
-        for (const CpTable &t : tables)
-            if (t.cp == cp)
-            {
-                useTable(&t);
-                return; // Watch out!
-            }
-        useTable(&tables[0]);
+        return (*cpToUtf8)[c];
     }
 
-    static uint32_t toUtf8Int(unsigned char c) noexcept
+    static uint32_t toPackedUtf8(unsigned char c) noexcept
     {
-        return activeTable->toUtf8Int[c];
+        uint32_t asInt;
+        memcpy(&asInt, (*cpToUtf8)[c], sizeof(asInt));
+        return asInt;
     }
 
     static char fromUtf8(TStringView s) noexcept;
 
     static char printableFromUtf8(TStringView s) noexcept
     {
-        uchar c = fromUtf8(s);
+        unsigned char c = fromUtf8(s);
         if (c < ' ')
             return '\0';
         return c;
     }
-
 };
 
 } // namespace tvision
