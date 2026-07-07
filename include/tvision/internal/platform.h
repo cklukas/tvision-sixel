@@ -41,7 +41,8 @@ public:
     virtual Boolean supportsGraphics() noexcept { return False; }
     virtual TGraphicProfile getGraphicProfile() noexcept { return TGraphicProfile(); }
     virtual void writeGraphicImage(TPoint /*pos*/, const uint32_t * /*pixels*/,
-                                   TPoint /*size*/, int /*maxColors*/) noexcept {}
+                                   TPoint /*size*/, int /*maxColors*/,
+                                   TGraphicDitherMode /*dither*/ = graphicDitherNearest) noexcept {}
     virtual void flush() noexcept {};
 };
 

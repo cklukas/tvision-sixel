@@ -90,9 +90,10 @@ TGraphicProfile NcursesDisplay::getGraphicProfile() noexcept
 }
 
 void NcursesDisplay::writeGraphicImage( TPoint pos, const uint32_t *pixels,
-                                      TPoint size, int maxColors ) noexcept
+                                      TPoint size, int maxColors,
+                                      TGraphicDitherMode dither ) noexcept
 {
-    ansiScreenWriter.writeSixelImage(pos, pixels, size, maxColors);
+    ansiScreenWriter.writeSixelImage(pos, pixels, size, maxColors, dither);
 }
 
 void NcursesDisplay::writeCell( TPoint pos, TStringView text, TColorAttr attr,

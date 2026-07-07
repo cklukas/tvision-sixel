@@ -8,7 +8,7 @@
  */
 
 #define Uses_TScreenCell
-#define Uses_TPoint
+#define Uses_TGraphicCanvas
 #include <tvision/tv.h>
 
 #include <internal/endian.h>
@@ -148,7 +148,8 @@ public:
     void clearScreen() noexcept;
 
     void writeCell(TPoint, TStringView, TColorAttr, bool) noexcept;
-    void writeSixelImage(TPoint, const uint32_t *, TPoint, int) noexcept;
+    void writeSixelImage(TPoint, const uint32_t *, TPoint, int,
+                         TGraphicDitherMode = graphicDitherNearest) noexcept;
     void setCaretPosition(TPoint) noexcept;
     void flush() noexcept;
 };

@@ -10,6 +10,7 @@
 
 #include <stdlib.h>
 #include <string>
+#include <vector>
 
 #ifdef _WIN32
 #include <process.h>
@@ -44,6 +45,32 @@ TEST(SixelEncoder, EmitsDcsWrappedRaster)
     EXPECT_EQ("\x1B\\", sixel.substr(sixel.size() - 2));
 }
 
+TEST(SixelEncoder, BayerDitherDiffersFromNearestOnGradient)
+{
+    // A grey ramp has more distinct colours than maxColors, so the encoder
+    // takes the cube-quantisation branch where dithering applies. Bayer must
+    // yield valid, DCS-wrapped output that differs from nearest-colour.
+    const int w = 32, h = 6;
+    std::vector<uint32_t> pixels(size_t(w)*h);
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x)
+        {
+            uint32_t v = uint32_t(x*255/(w - 1));
+            pixels[size_t(y)*w + x] = 0xFF000000u | (v << 16) | (v << 8) | v;
+        }
+
+    std::string nearest = tvision::encodeSixel(pixels.data(), {w, h}, 8,
+                                               graphicDitherNearest);
+    std::string bayer = tvision::encodeSixel(pixels.data(), {w, h}, 8,
+                                             graphicDitherBayer);
+
+    ASSERT_FALSE(nearest.empty());
+    ASSERT_FALSE(bayer.empty());
+    EXPECT_NE(nearest, bayer);
+    EXPECT_EQ("\x1BPq", bayer.substr(0, 3));
+    EXPECT_EQ("\x1B\\", bayer.substr(bayer.size() - 2));
+}
+
 TEST(SixelConfig, WritesAndLoadsSelectedProfile)
 {
     std::string path =
@@ -64,6 +91,7 @@ TEST(SixelConfig, WritesAndLoadsSelectedProfile)
     profile.fillWidth = 7;
     profile.fillHeight = 16;
     profile.maxColors = 64;
+    profile.dither = graphicDitherBayer;
 
     ASSERT_TRUE(tvision::SixelConfig::writeProfile(tvision::SixelConfig::profileKey(), profile));
 
@@ -74,6 +102,7 @@ TEST(SixelConfig, WritesAndLoadsSelectedProfile)
     EXPECT_EQ(7, loaded.fillWidth);
     EXPECT_EQ(16, loaded.fillHeight);
     EXPECT_EQ(64, loaded.maxColors);
+    EXPECT_EQ(graphicDitherBayer, loaded.dither);
 
     remove(path.c_str());
     setEnvVar("TVISION_SIXEL_CONFIG", nullptr);

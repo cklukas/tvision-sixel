@@ -493,7 +493,7 @@ std::vector<TRect> eraseStaleGraphicOverlay( DisplayAdapter &display, const Grap
                                 pixels[py*pixelWidth + px] = argb;
                     }
                 }
-                display.writeGraphicImage(rect.a, pixels.data(), {pixelWidth, pixelHeight}, profile.maxColors);
+                display.writeGraphicImage(rect.a, pixels.data(), {pixelWidth, pixelHeight}, profile.maxColors, profile.dither);
             }
         }
     }
@@ -595,7 +595,7 @@ GraphicFrame drawGraphicOverlay(DisplayAdapter &display, const GraphicOverlaySta
             pixels.a.x == 0 && pixels.a.y == 0 &&
             pixels.b.x == fullSize.x && pixels.b.y == fullSize.y)
             display.writeGraphicImage(fragment.globalCells.a, found->second.pixels.data(),
-                                      cropSize, maxColors);
+                                      cropSize, maxColors, profile.dither);
         else
         {
             std::vector<uint32_t> cropped;
@@ -603,7 +603,7 @@ GraphicFrame drawGraphicOverlay(DisplayAdapter &display, const GraphicOverlaySta
             if (fragment.shadowed)
                 applyGraphicShadow(cropped);
             display.writeGraphicImage(fragment.globalCells.a, cropped.data(),
-                                      cropSize, maxColors);
+                                      cropSize, maxColors, profile.dither);
         }
     }
     display.flush();

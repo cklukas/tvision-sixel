@@ -25,6 +25,20 @@ struct TGraphicColor
         r(ar), g(ag), b(ab), a(aa) {}
 };
 
+// How the sixel encoder reduces a full-colour raster to the palette:
+//   graphicDitherNearest  each pixel maps to its nearest palette entry
+//                         (flat colour bands on continuous-tone images).
+//   graphicDitherBayer    an ordered 8x8 Bayer matrix perturbs each pixel
+//                         before quantisation, trading banding for a stable
+//                         stipple that reads as extra shades.
+// The library default is Nearest; the CWorks suite pushes its own default
+// (Bayer) through TGraphicRuntime::setTemporaryProfile.
+enum TGraphicDitherMode
+{
+    graphicDitherNearest,
+    graphicDitherBayer
+};
+
 struct TGraphicProfile
 {
     Boolean enabled;
@@ -33,6 +47,7 @@ struct TGraphicProfile
     short fillWidth;
     short fillHeight;
     short maxColors;
+    TGraphicDitherMode dither;
 
     TGraphicProfile() noexcept :
         enabled(False),
@@ -40,7 +55,8 @@ struct TGraphicProfile
         cellHeight(0),
         fillWidth(0),
         fillHeight(0),
-        maxColors(256)
+        maxColors(256),
+        dither(graphicDitherNearest)
     {
     }
 };

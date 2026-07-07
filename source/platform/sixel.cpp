@@ -72,6 +72,44 @@ static int cubeLevels(int maxColors) noexcept
     return std::max(1, levels);
 }
 
+static int bayer8(int x, int y) noexcept
+{
+    static const uchar matrix[8][8] = {
+        { 0, 48, 12, 60,  3, 51, 15, 63},
+        {32, 16, 44, 28, 35, 19, 47, 31},
+        { 8, 56,  4, 52, 11, 59,  7, 55},
+        {40, 24, 36, 20, 43, 27, 39, 23},
+        { 2, 50, 14, 62,  1, 49, 13, 61},
+        {34, 18, 46, 30, 33, 17, 45, 29},
+        {10, 58,  6, 54,  9, 57,  5, 53},
+        {42, 26, 38, 22, 41, 25, 37, 21}
+    };
+    return matrix[y & 7][x & 7];
+}
+
+// Ordered-dither one channel to a level in [0, levels-1] from the Bayer
+// threshold t in [0, 63]: floor(v*(levels-1)/255 + (t + 0.5)/64), integer-only
+// so the encoder stays byte-deterministic.
+static int ditherLevel(int v, int levels, int t) noexcept
+{
+    int n = v*(levels - 1)*64 + t*255 + 127; // 127 ~= 0.5*255, the (t + 0.5) bias
+    int level = n/16320;                     // 16320 == 255*64
+    return level > levels - 1 ? levels - 1 : level;
+}
+
+// Bayer counterpart of quantizeKey: the three channels use phase-shifted
+// thresholds so the stipple does not tint toward a single hue.
+static int ditherKey(Rgb c, int levels, int x, int y) noexcept
+{
+    if (levels <= 1)
+        return 0;
+    int t = bayer8(x, y);
+    int lr = ditherLevel(c.r, levels, t);
+    int lg = ditherLevel(c.g, levels, (t + 21) & 63);
+    int lb = ditherLevel(c.b, levels, (t + 42) & 63);
+    return lr*levels*levels + lg*levels + lb;
+}
+
 static void appendNumber(std::string &out, int n)
 {
     char buf[16];
@@ -126,7 +164,8 @@ static void appendRun(std::string &out, int ch, int len)
 
 } // namespace
 
-std::string encodeSixel(const uint32_t *pixels, TPoint size, int maxColors)
+std::string encodeSixel(const uint32_t *pixels, TPoint size, int maxColors,
+                        TGraphicDitherMode dither)
 {
     if (!pixels || size.x <= 0 || size.y <= 0)
         return std::string();
@@ -187,7 +226,9 @@ std::string encodeSixel(const uint32_t *pixels, TPoint size, int maxColors)
                 int i = row + x;
                 if (!opaque(pixels[i]))
                     continue;
-                int key = quantizeKey(unpack(pixels[i]), levels);
+                int key = dither == graphicDitherBayer
+                    ? ditherKey(unpack(pixels[i]), levels, x, y)
+                    : quantizeKey(unpack(pixels[i]), levels);
                 int color = quantized[key];
                 if (color < 0)
                 {

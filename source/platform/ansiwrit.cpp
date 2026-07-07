@@ -165,9 +165,10 @@ void AnsiScreenWriter::setCaretPosition(TPoint pos) noexcept
 }
 
 void AnsiScreenWriter::writeSixelImage( TPoint pos, const uint32_t *pixels,
-                                        TPoint size, int maxColors ) noexcept
+                                        TPoint size, int maxColors,
+                                        TGraphicDitherMode dither ) noexcept
 {
-    std::string sixel = encodeSixel(pixels, size, maxColors);
+    std::string sixel = encodeSixel(pixels, size, maxColors, dither);
     if (sixel.empty())
         return;
 

@@ -7,7 +7,7 @@
 #ifndef TVISION_SIXEL_H
 #define TVISION_SIXEL_H
 
-#define Uses_TPoint
+#define Uses_TGraphicCanvas
 #include <tvision/tv.h>
 
 #include <string>
@@ -15,7 +15,8 @@
 namespace tvision
 {
 
-std::string encodeSixel(const uint32_t *pixels, TPoint size, int maxColors);
+std::string encodeSixel(const uint32_t *pixels, TPoint size, int maxColors,
+                        TGraphicDitherMode dither = graphicDitherNearest);
 
 } // namespace tvision
 

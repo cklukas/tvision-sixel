@@ -81,6 +81,11 @@ static void applyValue(TGraphicProfile &profile, const std::string &key, const s
         profile.fillHeight = parseInt(value, profile.fillHeight);
     else if (key == "max_colors")
         profile.maxColors = parseInt(value, profile.maxColors);
+    else if (key == "dither")
+    {
+        int cur = profile.dither == graphicDitherBayer ? 1 : 0;
+        profile.dither = parseInt(value, cur) != 0 ? graphicDitherBayer : graphicDitherNearest;
+    }
 }
 
 static bool loadProfile(const std::string &wanted, TGraphicProfile &profile)
@@ -297,6 +302,7 @@ bool SixelConfig::writeProfile(const std::string &key, const TGraphicProfile &pr
     out << "fill_width_px=" << profile.fillWidth << "\n";
     out << "fill_height_px=" << profile.fillHeight << "\n";
     out << "max_colors=" << profile.maxColors << "\n";
+    out << "dither=" << (profile.dither == graphicDitherBayer ? 1 : 0) << "\n";
     SixelDetectionInfo info = detect();
     out << "manual_sixel_supported=1\n";
     out << "detected_profile_key=" << info.profileKey << "\n";

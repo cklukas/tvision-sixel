@@ -49,7 +49,8 @@ private:
     void clearScreen() noexcept override;
     Boolean supportsGraphics() noexcept override;
     TGraphicProfile getGraphicProfile() noexcept override;
-    void writeGraphicImage(TPoint, const uint32_t *, TPoint, int) noexcept override;
+    void writeGraphicImage(TPoint, const uint32_t *, TPoint, int,
+                           TGraphicDitherMode = graphicDitherNearest) noexcept override;
     void flush() noexcept override;
 };
 
