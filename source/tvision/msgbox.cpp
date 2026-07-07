@@ -113,11 +113,29 @@ ushort messageBoxRect( const TRect &r,
 
 static TRect makeRect(TStringView text)
 {
+    // 40 columns; the interior offers r.b.x - 7 text columns and
+    // r.b.y - 6 text rows. Height follows the CONTENT: each
+    // newline-separated line contributes at least one row, long
+    // lines wrap — a multi-line message shows every line (the old
+    // width-only estimate clipped explicit line breaks).
     TRect r( 0, 0, 40, 9 );
+    const int columns = r.b.x - 7;
 
-    int width = strwidth(text);
-    if (width > (r.b.x - 7)*(r.b.y - 6))
-        r.b.y = width/(r.b.x - 7) + 6 + 1;
+    int rows = 0;
+    size_t begin = 0;
+    while (begin <= text.size())
+    {
+        size_t end = begin;
+        while (end < text.size() && text[end] != '\n')
+            ++end;
+        int width = strwidth(text.substr(begin, end - begin));
+        rows += width <= columns ? 1 : (width + columns - 1)/columns;
+        if (end == text.size())
+            break;
+        begin = end + 1;
+    }
+    if (rows > r.b.y - 6)
+        r.b.y = rows + 6;
 
     r.move((TProgram::deskTop->size.x - r.b.x) / 2,
            (TProgram::deskTop->size.y - r.b.y) / 2);
