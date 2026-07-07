@@ -334,6 +334,13 @@ class _FAR TRect;
 struct _FAR TEvent;
 class _FAR TGroup;
 
+// The global shadow metrics (defined in tview.cpp). 'shadowAttr' is
+// applied to cells under a shadow; on black cells its reverse is
+// used so shadows stay visible. Applications with configurable
+// color schemes may replace it to match their palette.
+extern TPoint shadowSize;
+extern TColorAttr shadowAttr;
+
 class TView : public TObject, public TStreamable
 {
 
