@@ -339,6 +339,12 @@ TGraphicProfile TGraphicRuntime::getProfile() noexcept
     return tvision::SixelConfig::activeProfile(platform.getDisplayFontSize());
 }
 
+TPoint TGraphicRuntime::detectedCellSize() noexcept
+{
+    tvision::Platform &platform = tvision::Platform::getInstance();
+    return platform.getDisplayFontSize();
+}
+
 void TGraphicRuntime::invalidate() noexcept
 {
     tvision::Platform &platform = tvision::Platform::getInstance();

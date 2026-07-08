@@ -129,6 +129,11 @@ class TGraphicRuntime
 public:
     static Boolean isConfigured() noexcept;
     static TGraphicProfile getProfile() noexcept;
+    // The terminal's live cell size in pixels (character width x height),
+    // as reported by the display this instant. {0, 0} when the terminal
+    // does not report a pixel size. Lets a caller size sixel graphics to
+    // the current font instead of a saved calibration.
+    static TPoint detectedCellSize() noexcept;
     static void invalidate() noexcept;
     static void invalidate(TGraphicView *view) noexcept;
     static void setTemporaryProfile(const TGraphicProfile &profile) noexcept;
