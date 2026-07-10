@@ -120,10 +120,9 @@ static bool loadProfile(const std::string &wanted, TGraphicProfile &profile)
     return found;
 }
 
-static void ensureDir(const std::string &path)
+static bool ensureDir(const std::string &path)
 {
-    if (!path.empty() && mkdir_one(path.c_str()) != 0 && errno != EEXIST)
-        ;
+    return path.empty() || mkdir_one(path.c_str()) == 0 || errno == EEXIST;
 }
 
 static std::string parentDir(const std::string &path)
@@ -132,10 +131,10 @@ static std::string parentDir(const std::string &path)
     return slash == std::string::npos ? std::string() : path.substr(0, slash);
 }
 
-static void ensureDirTree(const std::string &dir)
+static bool ensureDirTree(const std::string &dir)
 {
     if (dir.empty())
-        return;
+        return true;
 
     size_t pos = 0;
 #ifdef _WIN32
@@ -155,11 +154,13 @@ static void ensureDirTree(const std::string &dir)
 #else
         if (part.size() > 1)
 #endif
-            ensureDir(part);
+            if (!ensureDir(part))
+                return false;
         if (next == std::string::npos)
             break;
         pos = next + 1;
     }
+    return true;
 }
 
 } // namespace
@@ -287,7 +288,12 @@ bool SixelConfig::writeProfile(const std::string &key, const TGraphicProfile &pr
 {
     std::string path = configPath();
     std::string dir = parentDir(path);
-    ensureDirTree(dir);
+    if (!ensureDirTree(dir))
+    {
+        if (error)
+            *error = "cannot create " + dir + ": " + strerror(errno);
+        return false;
+    }
 
     std::ifstream in(path.c_str());
     std::ostringstream preserved;
