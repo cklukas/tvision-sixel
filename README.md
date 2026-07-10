@@ -1,6 +1,8 @@
 # Turbo Vision with Sixel support
 
-This project is based on the Turbo Vision codebase described below and extends it with prototype support for sixel graphics. The screenshot shows the new `sixeldemo` app with several raster-backed views running on macOS in the iTerm2 terminal app. This is a working prototype; it has not been tested on Linux, and Windows is not yet supported for sixel graphics.
+This project is based on the Turbo Vision codebase described below and extends it with prototype support for sixel graphics. The screenshot shows the new `sixeldemo` app with several raster-backed views running on macOS in iTerm2. The graphics path has also been tested natively with [Windows Terminal 1.22 or newer](https://github.com/microsoft/terminal/releases/tag/v1.22.10352.0), which is the first stable Windows Terminal release with SIXEL support. Linux terminals have not yet been validated.
+
+On Windows, Turbo Vision uses its VT display path, queries the terminal's primary device attributes for SIXEL capability, and falls back to Windows Terminal environment markers when the query is unanswered. The legacy `conhost.exe` display path remains text-only.
 
 ![Sixel demo in iTerm2](sixel/Screenshot%202026-07-04%20at%2022.39.32.png)
 

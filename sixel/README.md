@@ -13,10 +13,11 @@ pixel buffer for its rectangle. The terminal receives ordinary text output first
 and then receives sixel overlays for the visible graphics fragments.
 
 This is currently a working prototype. It has been tested with iTerm2 on macOS
-and with the native VT path used by Windows Terminal. Linux terminals have not
-been validated yet. On Windows, the display adapter uses the standard DA1
-(`ESC[c`) capability response and emits SIXEL only when the console is in VT
-mode; legacy `conhost.exe` remains text-only.
+and with the native VT path used by
+[Windows Terminal 1.22 or newer](https://github.com/microsoft/terminal/releases/tag/v1.22.10352.0).
+Linux terminals have not been validated yet. On Windows, the display adapter
+uses the standard DA1 (`ESC[c`) capability response and emits SIXEL only when
+the console is in VT mode; legacy `conhost.exe` remains text-only.
 
 ## Source Map
 
@@ -31,7 +32,8 @@ terminal encoding, configuration, and examples.
 | Overlay compositor | `source/tvision/graphicsoverlay.cpp` | Finds visible graphics fragments, resolves overlap, applies shadows, composites alpha, and sends images to the display backend. |
 | Configuration | `source/tvision/graphicsconfig.cpp` | Reads and writes the per-terminal sixel profile and exposes `TGraphicRuntime`. |
 | Sixel encoder | `source/platform/sixel.cpp` | Converts ARGB pixels into sixel DCS escape sequences with palette reduction and run-length encoding. |
-| Terminal writer | `source/platform/ansiwrit.cpp`, `source/platform/ncurdisp.cpp` | Moves the cursor and writes sixel data through the display adapter. |
+| Terminal writer | `source/platform/ansiwrit.cpp`, `source/platform/ncurdisp.cpp`, `source/platform/win32con.cpp` | Moves the cursor and writes sixel data through the Unix or Windows VT display adapter. |
+| Windows capability parser | `include/tvision/internal/da1.h` | Parses primary device attributes and recognizes parameter 4 as SIXEL support. |
 | Calibration utility | `examples/sixelcfg/sixelcfg.cpp` | Measures and stores cell size, fill size, and palette settings for the current terminal. |
 | Demo application | `examples/sixeldemo/` | Demonstrates diagnostics, color ranges, image display, Mandelbrot, formula plotting, and world clocks with moon phase rendering. |
 
@@ -75,6 +77,8 @@ classDiagram
     class TGraphicRuntime {
         +isConfigured() Boolean
         +getProfile() TGraphicProfile
+        +detectedProfile() TGraphicProfile
+        +detectedCellSize() TPoint
         +invalidate()
         +invalidate(TGraphicView*)
         +setTemporaryProfile(TGraphicProfile)
@@ -88,6 +92,7 @@ classDiagram
         +fillWidth
         +fillHeight
         +maxColors
+        +dither
     }
 
     TView <|-- TGraphicView
@@ -317,6 +322,12 @@ Fallback config path:
 $HOME/.config/tvision/sixel.conf
 ```
 
+On native Windows, when neither XDG nor `HOME` supplies a path, the fallback is:
+
+```text
+%APPDATA%\tvision\sixel.conf
+```
+
 Useful environment overrides:
 
 | Variable | Role |
@@ -343,6 +354,21 @@ max_colors=256
 The extra `detected_*` lines written by `sixelcfg` are diagnostic metadata.
 They are not required for rendering but make it easier to understand which
 terminal environment produced the calibration.
+
+### Windows capability detection
+
+The Win32 display adapter enables graphics only on Turbo Vision's ANSI/VT
+output path. The first capability check sends the primary device attributes
+request (`ESC[c`) and looks for parameter 4 in the response. A valid response
+without parameter 4 keeps graphics disabled. If the query is unanswered or
+malformed, `WT_SESSION` and `TERM_PROGRAM` provide a conservative fallback for
+Windows Terminal. The result is cached for the lifetime of the display adapter.
+
+`TGraphicRuntime::detectedProfile()` exposes the profile resolved by the active
+display adapter, including this Windows probe. Applications can merge their own
+palette, dithering, or sizing preferences into that profile before installing a
+temporary profile. `TGraphicRuntime::detectedCellSize()` independently exposes
+the terminal's live character-cell size.
 
 ## Demo Views
 
@@ -442,7 +468,7 @@ The prototype is intentionally conservative and has a few known boundaries:
 
 | Limitation | Current state |
 | --- | --- |
-| Terminal support | Tested on iTerm2/macOS and Windows Terminal. Linux terminals still need validation. |
+| Terminal support | Tested on iTerm2/macOS and Windows Terminal 1.22+. Linux terminals still need validation; legacy Windows `conhost.exe` is text-only. |
 | Capability detection | Interactive Windows VT consoles are queried with DA1 (`ESC[c`); a short timeout falls back to Windows Terminal environment markers. Profiles remain manually configurable through `sixelcfg`. |
 | Color limits | The encoder respects `maxColors`; large images may be quantized depending on the selected profile. |
 | Cell calibration | Correct output depends on matching terminal font cell dimensions. |
