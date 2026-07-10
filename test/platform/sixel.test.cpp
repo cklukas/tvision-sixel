@@ -3,7 +3,12 @@
  * Licensed under the MIT License.
  */
 
+#define Uses_TGraphicRuntime
+#define Uses_TPoint
+#define Uses_TRect
 #include <test.h>
+#include <tvision/tv.h>
+#include <tvision/graphics.h>
 
 #include <internal/graphics.h>
 #include <internal/sixel.h>

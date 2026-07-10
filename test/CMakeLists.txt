@@ -3,7 +3,9 @@ if (TV_BUILD_TESTS)
 
     add_executable(${PROJECT_NAME}-test ${TEST_SRC})
 
-    target_compile_features(${PROJECT_NAME}-test PRIVATE cxx_std_14)
+    # Current GoogleTest releases require C++17; the library itself remains
+    # C++14-compatible.
+    target_compile_features(${PROJECT_NAME}-test PRIVATE cxx_std_17)
     target_include_directories(${PROJECT_NAME}-test PRIVATE "${CMAKE_CURRENT_LIST_DIR}")
 
     tv_add_private_includes(${PROJECT_NAME}-test)
@@ -13,6 +15,9 @@ if (TV_BUILD_TESTS)
     tv_message(STATUS "Found 'gtest': ${GTEST}")
     find_library(GTEST_MAIN gtest_main REQUIRED)
     tv_message(STATUS "Found 'gtest_main': ${GTEST_MAIN}")
+    find_path(GTEST_INCLUDE_DIR gtest/gtest.h REQUIRED)
+    tv_message(STATUS "Found gtest headers: ${GTEST_INCLUDE_DIR}")
+    target_include_directories(${PROJECT_NAME}-test PRIVATE "${GTEST_INCLUDE_DIR}")
     target_link_libraries(${PROJECT_NAME}-test PRIVATE
         ${PROJECT_NAME}
         ${GTEST}

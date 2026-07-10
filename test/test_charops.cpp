@@ -35,8 +35,10 @@ uint32_t TestCharOps::mockCharToLower(uint32_t ch) noexcept
     switch (ch)
     {
         case U'F': return U'f';
-        case U'Ф': return U'ф';
-        case U'Ы': return U'ы';
+        // Keep these as numeric code points: MSVC interprets non-ASCII
+        // universal character literals according to the source code page.
+        case 0x0424: return 0x0444;
+        case 0x042B: return 0x044B;
         default: return ch;
     }
 }

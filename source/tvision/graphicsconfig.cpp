@@ -6,6 +6,8 @@
 
 #define Uses_TGraphicRuntime
 #define Uses_TScreen
+#define Uses_TPoint
+#define Uses_TRect
 #include <tvision/tv.h>
 
 #include <internal/graphics.h>
