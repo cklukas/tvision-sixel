@@ -12,9 +12,11 @@ handling in the usual way. A graphics view is an additional view type that owns 
 pixel buffer for its rectangle. The terminal receives ordinary text output first
 and then receives sixel overlays for the visible graphics fragments.
 
-This is currently a working prototype. It has been tested with iTerm2 on macOS.
-Linux terminals have not been validated yet, and Windows is not supported for
-sixel graphics at this stage.
+This is currently a working prototype. It has been tested with iTerm2 on macOS
+and with the native VT path used by Windows Terminal. Linux terminals have not
+been validated yet. On Windows, the display adapter uses the standard DA1
+(`ESC[c`) capability response and emits SIXEL only when the console is in VT
+mode; legacy `conhost.exe` remains text-only.
 
 ## Source Map
 
@@ -440,8 +442,8 @@ The prototype is intentionally conservative and has a few known boundaries:
 
 | Limitation | Current state |
 | --- | --- |
-| Terminal support | Tested on iTerm2/macOS. Linux terminals still need validation. Windows sixel output is not supported. |
-| Capability detection | Profiles are manually confirmed and persisted by `sixelcfg`; there is no universal automatic sixel negotiation. |
+| Terminal support | Tested on iTerm2/macOS and Windows Terminal. Linux terminals still need validation. |
+| Capability detection | Interactive Windows VT consoles are queried with DA1 (`ESC[c`); a short timeout falls back to Windows Terminal environment markers. Profiles remain manually configurable through `sixelcfg`. |
 | Color limits | The encoder respects `maxColors`; large images may be quantized depending on the selected profile. |
 | Cell calibration | Correct output depends on matching terminal font cell dimensions. |
 | Performance | Views are rendered into CPU memory and encoded per dirty fragment. Very large animated images can be expensive. |

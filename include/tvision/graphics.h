@@ -129,6 +129,9 @@ class TGraphicRuntime
 public:
     static Boolean isConfigured() noexcept;
     static TGraphicProfile getProfile() noexcept;
+    // Returns the profile reported by the active display adapter. On Windows
+    // this performs the cached DA1 capability probe on the first call.
+    static TGraphicProfile detectedProfile() noexcept;
     // The terminal's live cell size in pixels (character width x height),
     // as reported by the display this instant. {0, 0} when the terminal
     // does not report a pixel size. Lets a caller size sixel graphics to

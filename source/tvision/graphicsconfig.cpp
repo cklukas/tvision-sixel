@@ -126,8 +126,38 @@ static void ensureDir(const std::string &path)
 
 static std::string parentDir(const std::string &path)
 {
-    size_t slash = path.rfind('/');
+    size_t slash = path.find_last_of("/\\");
     return slash == std::string::npos ? std::string() : path.substr(0, slash);
+}
+
+static void ensureDirTree(const std::string &dir)
+{
+    if (dir.empty())
+        return;
+
+    size_t pos = 0;
+#ifdef _WIN32
+    if (dir.size() >= 2 && dir[1] == ':')
+        pos = 2; // Do not try to mkdir the drive root ("C:").
+#endif
+    while (pos < dir.size())
+    {
+        while (pos < dir.size() && (dir[pos] == '/' || dir[pos] == '\\'))
+            ++pos;
+        if (pos >= dir.size())
+            break;
+        size_t next = dir.find_first_of("/\\", pos);
+        std::string part = dir.substr(0, next);
+#ifdef _WIN32
+        if (part.size() > 2 || (part.size() == 2 && part[1] != ':'))
+#else
+        if (part.size() > 1)
+#endif
+            ensureDir(part);
+        if (next == std::string::npos)
+            break;
+        pos = next + 1;
+    }
 }
 
 } // namespace
@@ -222,6 +252,12 @@ std::string SixelConfig::configPath()
     if (home && *home)
         return std::string(home) + "/.config/tvision/sixel.conf";
 
+#ifdef _WIN32
+    const char *appdata = getenv("APPDATA");
+    if (appdata && *appdata)
+        return std::string(appdata) + "/tvision/sixel.conf";
+#endif
+
     return "sixel.conf";
 }
 
@@ -249,28 +285,7 @@ bool SixelConfig::writeProfile(const std::string &key, const TGraphicProfile &pr
 {
     std::string path = configPath();
     std::string dir = parentDir(path);
-    if (!dir.empty())
-    {
-        std::string accum;
-        size_t pos = 0;
-        if (dir[0] == '/')
-            accum = "/";
-        while (pos < dir.size())
-        {
-            size_t next = dir.find('/', pos);
-            std::string part = dir.substr(pos, next == std::string::npos ? std::string::npos : next - pos);
-            if (!part.empty())
-            {
-                if (accum.size() > 1)
-                    accum += '/';
-                accum += part;
-                ensureDir(accum);
-            }
-            if (next == std::string::npos)
-                break;
-            pos = next + 1;
-        }
-    }
+    ensureDirTree(dir);
 
     std::ifstream in(path.c_str());
     std::ostringstream preserved;
@@ -337,6 +352,12 @@ TGraphicProfile TGraphicRuntime::getProfile() noexcept
 {
     tvision::Platform &platform = tvision::Platform::getInstance();
     return tvision::SixelConfig::activeProfile(platform.getDisplayFontSize());
+}
+
+TGraphicProfile TGraphicRuntime::detectedProfile() noexcept
+{
+    tvision::Platform &platform = tvision::Platform::getInstance();
+    return platform.getDisplayGraphicProfile();
 }
 
 TPoint TGraphicRuntime::detectedCellSize() noexcept

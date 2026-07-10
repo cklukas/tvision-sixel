@@ -141,6 +141,8 @@ public:
         { return console.lock([] (auto *c) { return c->display.getColorCount(); }); }
     TPoint getDisplayFontSize() noexcept
         { return console.lock([] (auto *c) { return c->display.getFontSize(); }); }
+    TGraphicProfile getDisplayGraphicProfile() noexcept
+        { return console.lock([] (auto *c) { return c->display.getGraphicProfile(); }); }
     void setCaretPosition(int x, int y) noexcept { displayBuf.setCaretPosition(x, y); }
     ushort getScreenMode() noexcept;
     void setCaretSize(int size) noexcept { displayBuf.setCaretSize(size); }

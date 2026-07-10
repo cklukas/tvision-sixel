@@ -96,12 +96,22 @@ private:
 
     int getColorCount() noexcept override;
     TPoint getFontSize() noexcept override;
+    Boolean supportsGraphics() noexcept override;
+    TGraphicProfile getGraphicProfile() noexcept override;
+    void writeGraphicImage(TPoint, const uint32_t *, TPoint, int,
+                           TGraphicDitherMode) noexcept override;
 
     void writeCell(TPoint, TStringView, TColorAttr, bool) noexcept override;
     void setCaretPosition(TPoint) noexcept override;
     void setCaretSize(int) noexcept override;
     void clearScreen() noexcept override;
     void flush() noexcept override;
+
+    bool isLegacyConsole {true};
+    bool sixelCapabilityKnown {false};
+    bool sixelCapability {false};
+
+    bool detectSixelCapability() noexcept;
 };
 
 #endif // _WIN32

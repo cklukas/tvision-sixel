@@ -9,7 +9,12 @@
 #include <internal/termio.h>
 #include <internal/utf8.h>
 #include <internal/constmap.h>
+#include <internal/da1.h>
+#include <internal/graphics.h>
 #include <locale.h>
+#include <ctype.h>
+#include <stdlib.h>
+#include <string>
 
 namespace tvision
 {
@@ -301,7 +306,8 @@ bool Win32Input::getEvent(const INPUT_RECORD &ir, TEvent &ev) noexcept
 // Win32Display
 
 Win32Display::Win32Display(ConsoleCtl &aCon, bool isLegacyConsole) noexcept :
-    con(aCon)
+    con(aCon),
+    isLegacyConsole(isLegacyConsole)
 {
     if (!isLegacyConsole)
         ansiScreenWriter = new AnsiScreenWriter(con, TermCap::getDisplayCapabilities(con, *this));
@@ -367,6 +373,120 @@ int Win32Display::getColorCount() noexcept
 TPoint Win32Display::getFontSize() noexcept
 {
     return con.getFontSize();
+}
+
+static bool isKnownSixelTerminal() noexcept
+{
+    const char *wtSession = getenv("WT_SESSION");
+    if (wtSession && *wtSession)
+        return true;
+
+    const char *termProgram = getenv("TERM_PROGRAM");
+    if (!termProgram)
+        return false;
+    std::string value(termProgram);
+    for (char &ch : value)
+        ch = (char) tolower((unsigned char) ch);
+    return value == "windows terminal" || value == "windows_terminal";
+}
+
+bool Win32Display::detectSixelCapability() noexcept
+{
+    if (sixelCapabilityKnown)
+        return sixelCapability;
+    sixelCapabilityKnown = true;
+    sixelCapability = false;
+
+    if (isLegacyConsole)
+        return false;
+
+    DWORD inputMode = 0;
+    if (!GetConsoleMode(con.in(), &inputMode))
+        return false; // redirected input: never probe
+
+    DWORD outputMode = 0;
+    if (!GetConsoleMode(con.out(), &outputMode) ||
+        !(outputMode & ENABLE_VIRTUAL_TERMINAL_PROCESSING))
+        return false; // redirected or legacy output: never probe
+
+    const DWORD probeMode = inputMode | ENABLE_VIRTUAL_TERMINAL_INPUT;
+    if (!SetConsoleMode(con.in(), probeMode))
+        return false;
+
+    static constexpr char request[] = "\x1b[c";
+    con.write(request, sizeof(request) - 1);
+
+    char response[512];
+    size_t used = 0;
+    const DWORD timeout = 100;
+    const ULONGLONG deadline = GetTickCount64() + timeout;
+    while (used < sizeof(response))
+    {
+        const ULONGLONG now = GetTickCount64();
+        if (now >= deadline)
+            break;
+        DWORD waitMs = (DWORD) (deadline - now);
+        DWORD wait = WaitForSingleObject(con.in(), waitMs);
+        if (wait != WAIT_OBJECT_0)
+            break;
+
+        DWORD bytes = 0;
+        if (!ReadFile(con.in(), response + used,
+                      (DWORD) (sizeof(response) - used), &bytes, nullptr) ||
+            bytes == 0)
+            break;
+        used += bytes;
+        Da1SixelResult parsed = parseDa1Sixel(response, used);
+        if (parsed == Da1SixelResult::Supported)
+        {
+            sixelCapability = true;
+            break;
+        }
+        if (parsed == Da1SixelResult::Unsupported)
+            break;
+    }
+
+    SetConsoleMode(con.in(), inputMode);
+
+    if (used == 0 || parseDa1Sixel(response, used) == Da1SixelResult::Unknown)
+        // DA1 is not answered by every VT host.  Only use environment hints
+        // for this timeout/unknown case; a valid DA1 response wins.
+        sixelCapability = isKnownSixelTerminal();
+    return sixelCapability;
+}
+
+Boolean Win32Display::supportsGraphics() noexcept
+{
+    TGraphicProfile profile = getGraphicProfile();
+    return profile.enabled;
+}
+
+TGraphicProfile Win32Display::getGraphicProfile() noexcept
+{
+    TGraphicProfile profile = SixelConfig::activeProfile(getFontSize());
+    if (!profile.enabled && detectSixelCapability())
+    {
+        profile.enabled = True;
+        if (profile.cellWidth <= 0)
+            profile.cellWidth = getFontSize().x;
+        if (profile.cellHeight <= 0)
+            profile.cellHeight = getFontSize().y;
+        if (profile.fillWidth <= 0)
+            profile.fillWidth = profile.cellWidth;
+        if (profile.fillHeight <= 0)
+            profile.fillHeight = profile.cellHeight;
+        if (profile.maxColors <= 1)
+            profile.maxColors = 256;
+    }
+    return profile;
+}
+
+void Win32Display::writeGraphicImage(TPoint pos, const uint32_t *pixels,
+                                     TPoint imageSize, int maxColors,
+                                     TGraphicDitherMode dither) noexcept
+{
+    if (ansiScreenWriter && supportsGraphics())
+        ansiScreenWriter->writeSixelImage(pos, pixels, imageSize, maxColors, dither);
 }
 
 void Win32Display::setCaretSize(int size) noexcept
