@@ -33,11 +33,16 @@
 
 #include <math.h>
 #include <stdint.h>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#ifdef _WIN32
+#include <io.h>
+#endif
 
 #include <string>
 #include <vector>
@@ -1083,11 +1088,21 @@ static std::string shellQuote(const char *s)
 
 static bool convertImageToBmp(const char *source, char *target, size_t targetSize)
 {
+#ifdef _WIN32
+    snprintf(target, targetSize, "sixeldemo-image-XXXXXX.bmp");
+    if (_mktemp_s(target, targetSize) != 0)
+        return false;
+    FILE *created = fopen(target, "wb");
+    if (!created)
+        return false;
+    fclose(created);
+#else
     snprintf(target, targetSize, "/tmp/sixeldemo-image-XXXXXX.bmp");
     int fd = mkstemps(target, 4);
     if (fd < 0)
         return false;
     close(fd);
+#endif
 
     std::string in = shellQuote(source);
     std::string out = shellQuote(target);
