@@ -9,6 +9,7 @@
 #include <internal/ncursinp.h>
 #include <internal/sighandl.h>
 #include <internal/conctl.h>
+#include <internal/headless.h>
 
 namespace tvision
 {
@@ -31,6 +32,8 @@ Platform &Platform::getInstance() noexcept
 
 ConsoleAdapter &Platform::createConsole() noexcept
 {
+    if (ConsoleAdapter *headless = createHeadlessConsole())
+        return *headless;
 #ifdef _WIN32
     return Win32ConsoleAdapter::create();
 #else

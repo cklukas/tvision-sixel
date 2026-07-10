@@ -8,6 +8,13 @@ On Windows, Turbo Vision uses its VT display path, queries the terminal's primar
 
 See the [sixel implementation documentation](sixel/README.md) for details on the graphics view API, overlay compositor, shadow drawing, sixel encoder, configuration, and demo internals.
 
+For deterministic automation without a terminal, `<tvision/headless.h>`
+provides a versioned duplex control channel and `.tvf` frame format. The
+headless display captures the real Turbo Vision cell buffer plus the shared
+post-SIXEL-quantization graphics layer. See `examples/headless` for a minimal
+controller that starts an unmodified application, injects keyboard and atomic
+mouse input, resizes its virtual screen, waits for a frame, and saves a capture.
+
 # Turbo Vision
 
 A modern port of Turbo Vision 2.0, the classical framework for text-based user interfaces. Now cross-platform and with Unicode support.

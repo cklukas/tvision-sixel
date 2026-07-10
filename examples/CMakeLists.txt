@@ -36,7 +36,7 @@ if (TV_BUILD_EXAMPLES)
         tv_app_common(${app})
     endfunction()
 
-    list(APPEND TVAPPS tvedit tvdemo tvdir tvforms tvhc mmenu palette sixeldemo sixelcfg)
+    list(APPEND TVAPPS tvedit tvdemo tvdir tvforms tvhc mmenu palette sixeldemo sixelcfg headless)
     list(APPEND TVINSTALLAPPS tvedit tvdemo tvhc)
 
     add_executable(hello "${PROJECT_SOURCE_DIR}/hello.cpp")

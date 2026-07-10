@@ -162,32 +162,41 @@ static void appendRun(std::string &out, int ch, int len)
             out.push_back(char(ch));
 }
 
-} // namespace
-
-std::string encodeSixel(const uint32_t *pixels, TPoint size, int maxColors,
-                        TGraphicDitherMode dither)
+struct QuantizedImage
 {
-    if (!pixels || size.x <= 0 || size.y <= 0)
-        return std::string();
-    maxColors = std::max(2, std::min(maxColors, 4096));
-    int width = size.x;
-    int height = size.y;
-    int pixelCount = width*height;
-    int bandCount = (height + 5)/6;
-    int wordsPerBand = (maxColors + 63)/64;
-
+    int width {0};
+    int height {0};
+    int bandCount {0};
+    int wordsPerBand {0};
     std::vector<Rgb> palette;
-    std::vector<short> index(pixelCount, -1);
-    std::vector<uint64_t> active(bandCount*wordsPerBand, 0);
+    std::vector<short> index;
+    std::vector<uint64_t> active;
+};
+
+static QuantizedImage quantize(const uint32_t *pixels, TPoint size,
+                               int maxColors, TGraphicDitherMode dither)
+{
+    QuantizedImage image;
+    if (!pixels || size.x <= 0 || size.y <= 0)
+        return image;
+    maxColors = std::max(2, std::min(maxColors, 4096));
+    image.width = size.x;
+    image.height = size.y;
+    image.bandCount = (image.height + 5)/6;
+    image.wordsPerBand = (maxColors + 63)/64;
+    int pixelCount = image.width*image.height;
+
+    image.index.assign(pixelCount, -1);
+    image.active.assign(image.bandCount*image.wordsPerBand, 0);
 
     std::unordered_map<int, int> exact;
     exact.reserve(maxColors*2);
     bool exactPalette = true;
-    for (int y = 0; y < height && exactPalette; ++y)
+    for (int y = 0; y < image.height && exactPalette; ++y)
     {
         int band = y/6;
-        int row = y*width;
-        for (int x = 0; x < width; ++x)
+        int row = y*image.width;
+        for (int x = 0; x < image.width; ++x)
         {
             int i = row + x;
             if (!opaque(pixels[i]))
@@ -197,31 +206,31 @@ std::string encodeSixel(const uint32_t *pixels, TPoint size, int maxColors,
             auto found = exact.find(key);
             if (found == exact.end())
             {
-                if ((int) palette.size() >= maxColors)
+                if ((int) image.palette.size() >= maxColors)
                 {
                     exactPalette = false;
                     break;
                 }
-                found = exact.insert({key, palette.size()}).first;
-                palette.push_back(rgb);
+                found = exact.insert({key, image.palette.size()}).first;
+                image.palette.push_back(rgb);
             }
-            index[i] = short(found->second);
-            markActive(active, wordsPerBand, band, found->second);
+            image.index[i] = short(found->second);
+            markActive(image.active, image.wordsPerBand, band, found->second);
         }
     }
 
     if (!exactPalette)
     {
-        std::fill(index.begin(), index.end(), short(-1));
-        std::fill(active.begin(), active.end(), uint64_t(0));
-        palette.clear();
+        std::fill(image.index.begin(), image.index.end(), short(-1));
+        std::fill(image.active.begin(), image.active.end(), uint64_t(0));
+        image.palette.clear();
         int levels = cubeLevels(maxColors);
         std::vector<short> quantized(levels*levels*levels, -1);
-        for (int y = 0; y < height; ++y)
+        for (int y = 0; y < image.height; ++y)
         {
             int band = y/6;
-            int row = y*width;
-            for (int x = 0; x < width; ++x)
+            int row = y*image.width;
+            for (int x = 0; x < image.width; ++x)
             {
                 int i = row + x;
                 if (!opaque(pixels[i]))
@@ -232,30 +241,59 @@ std::string encodeSixel(const uint32_t *pixels, TPoint size, int maxColors,
                 int color = quantized[key];
                 if (color < 0)
                 {
-                    color = int(palette.size());
+                    color = int(image.palette.size());
                     quantized[key] = short(color);
-                    palette.push_back(dequantize(key, levels));
+                    image.palette.push_back(dequantize(key, levels));
                 }
-                index[i] = short(color);
-                markActive(active, wordsPerBand, band, color);
+                image.index[i] = short(color);
+                markActive(image.active, image.wordsPerBand, band, color);
             }
         }
     }
+    return image;
+}
 
-    if (palette.empty())
+} // namespace
+
+std::vector<uint32_t> quantizeSixelPixels(const uint32_t *pixels, TPoint size,
+                                          int maxColors,
+                                          TGraphicDitherMode dither)
+{
+    QuantizedImage image = quantize(pixels, size, maxColors, dither);
+    std::vector<uint32_t> out(image.index.size(), 0);
+    for (size_t i = 0; i < image.index.size(); ++i)
+    {
+        int color = image.index[i];
+        if (color < 0)
+            continue;
+        Rgb rgb = image.palette[size_t(color)];
+        out[i] = 0xFF000000u | (uint32_t(rgb.r) << 16) |
+                 (uint32_t(rgb.g) << 8) | uint32_t(rgb.b);
+    }
+    return out;
+}
+
+std::string encodeSixel(const uint32_t *pixels, TPoint size, int maxColors,
+                        TGraphicDitherMode dither)
+{
+    QuantizedImage image = quantize(pixels, size, maxColors, dither);
+    if (image.palette.empty())
         return std::string();
 
+    int width = image.width;
+    int height = image.height;
+
     std::string out;
-    out.reserve(std::max(256, width*bandCount*int(palette.size())/8) +
-                int(palette.size())*24 + 64);
+    out.reserve(std::max(256, width*image.bandCount*int(image.palette.size())/8) +
+                int(image.palette.size())*24 + 64);
     out.append("\x1BPq", 3);
     out.append("\"1;1;", 5);
     appendNumber(out, width);
     out.push_back(';');
     appendNumber(out, height);
 
-    for (size_t i = 0; i < palette.size(); ++i)
-        appendPaletteColor(out, i, palette[i]);
+    for (size_t i = 0; i < image.palette.size(); ++i)
+        appendPaletteColor(out, i, image.palette[i]);
 
     for (int bandY = 0; bandY < height; bandY += 6)
     {
@@ -264,9 +302,9 @@ std::string encodeSixel(const uint32_t *pixels, TPoint size, int maxColors,
             out.push_back('-');
         int bandHeight = std::min(6, height - bandY);
         bool wrotePlane = false;
-        for (size_t color = 0; color < palette.size(); ++color)
+        for (size_t color = 0; color < image.palette.size(); ++color)
         {
-            if (!isActive(active, wordsPerBand, bandIndex, int(color)))
+            if (!isActive(image.active, image.wordsPerBand, bandIndex, int(color)))
                 continue;
 
             if (wrotePlane)
@@ -281,7 +319,7 @@ std::string encodeSixel(const uint32_t *pixels, TPoint size, int maxColors,
             {
                 int bits = 0;
                 for (int bit = 0; bit < bandHeight; ++bit)
-                    if (index[(bandY + bit)*width + x] == int(color))
+                    if (image.index[(bandY + bit)*width + x] == int(color))
                         bits |= 1 << bit;
                 int ch = '?' + bits;
                 if (ch == runChar)
