@@ -115,7 +115,7 @@ void deleteString() noexcept
 #if !defined(__FLAT__)
     movmem( n, curRec, size_t( (char *)lastRec - (char *)n ) );
 #else
-    memcpy( curRec, n, size_t( (char *)lastRec - (char *)n ) );
+    memmove( curRec, n, size_t( (char *)lastRec - (char *)n ) );
 #endif
     lastRec = backup( lastRec, len );
 }
